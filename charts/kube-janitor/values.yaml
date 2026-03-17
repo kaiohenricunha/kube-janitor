@@ -1,0 +1,105 @@
+## kube-janitor Helm chart values
+## Ref: https://github.com/kaiohenricunha/kube-janitor
+
+image:
+  repository: ghcr.io/kaiohenricunha/kube-janitor
+  tag: "" # Defaults to Chart.appVersion
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+controller:
+  ## dryRun controls whether kube-janitor will actually delete resources.
+  ## STRONGLY RECOMMENDED to start with true and only disable after validating
+  ## that policies produce expected findings.
+  dryRun: true
+
+  ## scanInterval is how often the controller re-evaluates all resources for TTL expiry.
+  scanInterval: "5m"
+
+  ## logLevel: 0=info, 1=debug, 2=trace
+  logLevel: 0
+
+  ## development enables development-mode logging (human-readable, with caller info).
+  development: false
+
+  ## otelEndpoint is the OpenTelemetry collector gRPC endpoint.
+  ## Empty string disables tracing.
+  otelEndpoint: ""
+
+  ## leaderElection enables leader election for high-availability deployments.
+  ## Only needed when running multiple replicas.
+  leaderElection: false
+
+  ## extraArgs passes additional flags to the controller binary.
+  extraArgs: []
+
+  ## resources defines resource requests/limits for the controller container.
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+  ## podAnnotations are added to the controller pod.
+  podAnnotations: {}
+
+  ## podLabels are added to the controller pod.
+  podLabels: {}
+
+  ## nodeSelector constrains which nodes the controller runs on.
+  nodeSelector: {}
+
+  ## tolerations allow the controller to be scheduled on tainted nodes.
+  tolerations: []
+
+  ## affinity configures pod scheduling affinity.
+  affinity: {}
+
+  ## securityContext sets the pod-level security context.
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    seccompProfile:
+      type: RuntimeDefault
+
+  ## containerSecurityContext sets the container-level security context.
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+
+serviceAccount:
+  ## create determines whether a ServiceAccount is created.
+  create: true
+  ## name is the ServiceAccount name. If empty, uses the fullname.
+  name: ""
+  ## annotations to add to the ServiceAccount.
+  annotations: {}
+
+metrics:
+  ## enabled controls whether the Prometheus metrics endpoint is exposed.
+  enabled: true
+  ## port is the port the metrics endpoint listens on.
+  port: 8080
+  ## serviceMonitor creates a Prometheus ServiceMonitor for automatic scraping.
+  serviceMonitor:
+    enabled: false
+    interval: "30s"
+    labels: {}
+
+## rbac configures cluster-level RBAC resources.
+rbac:
+  create: true
+
+## replicaCount is the number of controller replicas.
+## Use 1 without leader election, ≥2 with leader election enabled.
+replicaCount: 1

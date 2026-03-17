@@ -1,0 +1,60 @@
+run:
+  timeout: 5m
+  go: "1.26"
+
+linters:
+  enable:
+    - errcheck        # check for unchecked errors
+    - govet           # go vet checks
+    - staticcheck     # advanced static analysis
+    - gosimple        # simplification suggestions
+    - ineffassign     # detect ineffectual assignments
+    - unused          # detect unused code
+    - misspell        # correct spelling errors
+    - goimports       # imports ordering
+    - godot           # check comment formatting
+    - noctx           # detect http requests without context
+    - bodyclose       # http response body close check
+    - prealloc        # suggest pre-allocation
+    - revive          # fast linter with many rules
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: false
+
+  govet:
+    enable:
+      - shadow
+
+  revive:
+    rules:
+      - name: exported
+        disabled: false
+      - name: error-return
+        disabled: false
+      - name: var-naming
+        disabled: false
+
+  godot:
+    scope: toplevel
+    period: true
+
+  misspell:
+    locale: US
+
+issues:
+  exclude-rules:
+    # Test files have relaxed linting.
+    - path: "_test\\.go"
+      linters:
+        - errcheck
+        - godot
+
+    # Generated files.
+    - path: "zz_generated"
+      linters:
+        - all
+
+  max-issues-per-linter: 0
+  max-same-issues: 0

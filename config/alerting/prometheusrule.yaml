@@ -1,0 +1,77 @@
+## Sample PrometheusRule for kube-janitor alerting.
+## Install with: kubectl apply -f config/alerting/prometheusrule.yaml
+## Requires Prometheus Operator (kube-prometheus-stack or similar).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: kube-janitor-alerts
+  namespace: monitoring
+  labels:
+    prometheus: kube-prometheus
+    role: alert-rules
+    app.kubernetes.io/name: kube-janitor
+spec:
+  groups:
+    - name: kube-janitor.errors
+      interval: 1m
+      rules:
+        - alert: JanitorHighErrorRate
+          expr: |
+            rate(janitor_reconcile_errors_total[5m]) > 0.1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "kube-janitor has a high reconcile error rate"
+            description: >
+              kube-janitor is experiencing {{ $value | humanize }} reconcile errors/second
+              on controller {{ $labels.controller }} for kind {{ $labels.kind }}.
+              Check controller logs for details.
+
+        - alert: JanitorScanStalled
+          expr: |
+            time() - max(janitor_resources_scanned_total) by (kind) > 1800
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: "kube-janitor scan appears stalled"
+            description: >
+              kube-janitor has not scanned any {{ $labels.kind }} resources in 30 minutes.
+              The controller may be down or stuck.
+
+    - name: kube-janitor.findings
+      interval: 5m
+      rules:
+        - alert: JanitorOrphanRateSurge
+          expr: |
+            increase(janitor_resources_classified_total{class="orphaned"}[1h]) > 100
+          for: 0m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Unusually high rate of orphaned resources detected"
+            description: >
+              kube-janitor classified {{ $value }} new orphaned {{ $labels.kind }} resources
+              in the last hour. This may indicate a partial deployment failure or
+              misconfigured garbage collection.
+
+        - alert: JanitorDryRunDeleteSurge
+          expr: |
+            increase(janitor_actions_total{action="dryrun-delete"}[1h]) > 50
+          for: 0m
+          labels:
+            severity: info
+          annotations:
+            summary: "kube-janitor would delete many resources (dry-run)"
+            description: >
+              kube-janitor's dry-run mode would delete {{ $value }} resources in the last hour.
+              Review findings before enabling deletion mode.
+
+    - name: kube-janitor.slos
+      rules:
+        - record: janitor:reconcile_duration:p99
+          expr: |
+            histogram_quantile(0.99,
+              rate(janitor_reconcile_duration_seconds_bucket[5m])
+            )

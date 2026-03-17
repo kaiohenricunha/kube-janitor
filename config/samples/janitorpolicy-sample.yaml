@@ -1,0 +1,65 @@
+## Sample JanitorPolicy: Clean up preview/PR namespaces
+## Apply this after installing CRDs: kubectl apply -f config/samples/janitorpolicy-sample.yaml
+---
+apiVersion: janitor.io/v1alpha1
+kind: JanitorPolicy
+metadata:
+  name: preview-namespace-ttl
+spec:
+  selector:
+    kinds:
+      - group: ""
+        version: v1
+        kind: Namespace
+    namespaceSelector:
+      matchLabels:
+        env: preview
+  ttl:
+    default: 72h
+    annotation: "janitor.io/ttl"
+    expiresAtAnnotation: "janitor.io/expires-at"
+  protection:
+    annotationKey: "janitor.io/protected"
+    namespaces:
+      - production
+      - staging
+  prNamespace:
+    enabled: true
+    labelKey: "janitor.io/pr"
+    stateAnnotation: "janitor.io/pr-state"
+    closedTTL: 1h
+  action:
+    mode: DryRun    # start with DryRun, change to Report then Delete after validating
+    confidenceThreshold: 0.9
+  reporting:
+    events: true
+    annotations: false
+---
+## Sample JanitorPolicy: Identify abandoned ConfigMaps (report-only)
+apiVersion: janitor.io/v1alpha1
+kind: JanitorPolicy
+metadata:
+  name: abandoned-configmaps
+spec:
+  selector:
+    kinds:
+      - group: ""
+        version: v1
+        kind: ConfigMap
+    # Exclude system namespaces via protection section below
+  orphan:
+    enabled: true
+    minAge: 24h
+    confidenceThreshold: 0.8
+  protection:
+    annotationKey: "janitor.io/protected"
+    namespaces:
+      - kube-system
+      - kube-public
+      - default
+      - kube-node-lease
+  action:
+    mode: Report    # report only — review findings before enabling deletion
+    confidenceThreshold: 0.8
+  reporting:
+    events: true

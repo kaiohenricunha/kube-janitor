@@ -1,0 +1,21 @@
+apiVersion: v2
+name: kube-janitor
+description: A Kubernetes cleanup controller for orphaned, expired, and unused resources.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/kaiohenricunha/kube-janitor
+sources:
+  - https://github.com/kaiohenricunha/kube-janitor
+maintainers:
+  - name: kaiohenricunha
+    url: https://github.com/kaiohenricunha
+keywords:
+  - kubernetes
+  - cleanup
+  - garbage-collection
+  - operator
+  - controller
+annotations:
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/category: monitoring-logging
