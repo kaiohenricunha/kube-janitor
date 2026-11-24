@@ -5,8 +5,8 @@ description: >-
   temporary, after their expiry. Every pack is disabled by default; an enabled pack
   starts in audit mode.
 type: application
-version: 0.1.0-dev
-appVersion: "0.1.0-dev"
+version: 0.1.0
+appVersion: "0.1.0"
 kubeVersion: ">=1.34.0-0"
 home: https://github.com/kaiohenricunha/kube-janitor
 sources:
@@ -22,3 +22,13 @@ maintainers:
     url: https://github.com/kaiohenricunha
 annotations:
   artifacthub.io/license: Apache-2.0
+  artifacthub.io/category: security
+  artifacthub.io/prerelease: "false"
+  artifacthub.io/links: |
+    - name: Design and safety model
+      url: https://github.com/kaiohenricunha/kube-janitor/blob/main/docs/specs/kyverno-policy-pack.md
+    - name: Compatibility (Kyverno >= 1.20, Kubernetes 1.34-1.37)
+      url: https://github.com/kaiohenricunha/kube-janitor/blob/main/docs/specs/compatibility.md
+  artifacthub.io/changes: |
+    - kind: added
+      description: First release. Packs ephemeralPods, previewEnvironments, temporaryConfigMaps, completedJobsRetention (all disabled by default; audit mode first).

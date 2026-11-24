@@ -8,8 +8,8 @@ metadata:
     app.kubernetes.io/name: kube-janitor-policies
     app.kubernetes.io/instance: t
     app.kubernetes.io/managed-by: Helm
-    app.kubernetes.io/version: "0.1.0-dev"
-    helm.sh/chart: kube-janitor-policies-0.1.0-dev
+    app.kubernetes.io/version: "0.1.0"
+    helm.sh/chart: kube-janitor-policies-0.1.0
     janitor.io/pack: completed-jobs-retention
     rbac.kyverno.io/aggregate-to-cleanup-controller: "true"
 rules:
@@ -26,8 +26,8 @@ metadata:
     app.kubernetes.io/name: kube-janitor-policies
     app.kubernetes.io/instance: t
     app.kubernetes.io/managed-by: Helm
-    app.kubernetes.io/version: "0.1.0-dev"
-    helm.sh/chart: kube-janitor-policies-0.1.0-dev
+    app.kubernetes.io/version: "0.1.0"
+    helm.sh/chart: kube-janitor-policies-0.1.0
     janitor.io/pack: ephemeral-pods
     rbac.kyverno.io/aggregate-to-cleanup-controller: "true"
 rules:
@@ -44,8 +44,8 @@ metadata:
     app.kubernetes.io/name: kube-janitor-policies
     app.kubernetes.io/instance: t
     app.kubernetes.io/managed-by: Helm
-    app.kubernetes.io/version: "0.1.0-dev"
-    helm.sh/chart: kube-janitor-policies-0.1.0-dev
+    app.kubernetes.io/version: "0.1.0"
+    helm.sh/chart: kube-janitor-policies-0.1.0
     janitor.io/pack: preview-environments
     rbac.kyverno.io/aggregate-to-cleanup-controller: "true"
 rules:
@@ -62,8 +62,8 @@ metadata:
     app.kubernetes.io/name: kube-janitor-policies
     app.kubernetes.io/instance: t
     app.kubernetes.io/managed-by: Helm
-    app.kubernetes.io/version: "0.1.0-dev"
-    helm.sh/chart: kube-janitor-policies-0.1.0-dev
+    app.kubernetes.io/version: "0.1.0"
+    helm.sh/chart: kube-janitor-policies-0.1.0
     janitor.io/pack: temporary-configmaps
     rbac.kyverno.io/aggregate-to-cleanup-controller: "true"
 rules:
@@ -80,8 +80,8 @@ metadata:
     app.kubernetes.io/name: kube-janitor-policies
     app.kubernetes.io/instance: t
     app.kubernetes.io/managed-by: Helm
-    app.kubernetes.io/version: "0.1.0-dev"
-    helm.sh/chart: kube-janitor-policies-0.1.0-dev
+    app.kubernetes.io/version: "0.1.0"
+    helm.sh/chart: kube-janitor-policies-0.1.0
     janitor.io/pack: completed-jobs-retention
   annotations:
     policies.kyverno.io/description: >-
@@ -160,8 +160,8 @@ metadata:
     app.kubernetes.io/name: kube-janitor-policies
     app.kubernetes.io/instance: t
     app.kubernetes.io/managed-by: Helm
-    app.kubernetes.io/version: "0.1.0-dev"
-    helm.sh/chart: kube-janitor-policies-0.1.0-dev
+    app.kubernetes.io/version: "0.1.0"
+    helm.sh/chart: kube-janitor-policies-0.1.0
     janitor.io/pack: ephemeral-pods
   annotations:
     policies.kyverno.io/description: >-
@@ -242,8 +242,8 @@ metadata:
     app.kubernetes.io/name: kube-janitor-policies
     app.kubernetes.io/instance: t
     app.kubernetes.io/managed-by: Helm
-    app.kubernetes.io/version: "0.1.0-dev"
-    helm.sh/chart: kube-janitor-policies-0.1.0-dev
+    app.kubernetes.io/version: "0.1.0"
+    helm.sh/chart: kube-janitor-policies-0.1.0
     janitor.io/pack: preview-environments
   annotations:
     policies.kyverno.io/description: >-
@@ -316,8 +316,8 @@ metadata:
     app.kubernetes.io/name: kube-janitor-policies
     app.kubernetes.io/instance: t
     app.kubernetes.io/managed-by: Helm
-    app.kubernetes.io/version: "0.1.0-dev"
-    helm.sh/chart: kube-janitor-policies-0.1.0-dev
+    app.kubernetes.io/version: "0.1.0"
+    helm.sh/chart: kube-janitor-policies-0.1.0
     janitor.io/pack: temporary-configmaps
   annotations:
     policies.kyverno.io/description: >-
@@ -401,8 +401,8 @@ metadata:
     app.kubernetes.io/name: kube-janitor-policies
     app.kubernetes.io/instance: t
     app.kubernetes.io/managed-by: Helm
-    app.kubernetes.io/version: "0.1.0-dev"
-    helm.sh/chart: kube-janitor-policies-0.1.0-dev
+    app.kubernetes.io/version: "0.1.0"
+    helm.sh/chart: kube-janitor-policies-0.1.0
 spec:
   failurePolicy: Ignore
   matchConstraints:
@@ -436,8 +436,8 @@ metadata:
     app.kubernetes.io/name: kube-janitor-policies
     app.kubernetes.io/instance: t
     app.kubernetes.io/managed-by: Helm
-    app.kubernetes.io/version: "0.1.0-dev"
-    helm.sh/chart: kube-janitor-policies-0.1.0-dev
+    app.kubernetes.io/version: "0.1.0"
+    helm.sh/chart: kube-janitor-policies-0.1.0
 spec:
   failurePolicy: Fail
   matchConstraints:
@@ -524,8 +524,8 @@ metadata:
     app.kubernetes.io/name: kube-janitor-policies
     app.kubernetes.io/instance: t
     app.kubernetes.io/managed-by: Helm
-    app.kubernetes.io/version: "0.1.0-dev"
-    helm.sh/chart: kube-janitor-policies-0.1.0-dev
+    app.kubernetes.io/version: "0.1.0"
+    helm.sh/chart: kube-janitor-policies-0.1.0
 spec:
   policyName: kube-janitor-mixed-ownership
   validationActions: ["Warn","Audit"]
@@ -539,8 +539,8 @@ metadata:
     app.kubernetes.io/name: kube-janitor-policies
     app.kubernetes.io/instance: t
     app.kubernetes.io/managed-by: Helm
-    app.kubernetes.io/version: "0.1.0-dev"
-    helm.sh/chart: kube-janitor-policies-0.1.0-dev
+    app.kubernetes.io/version: "0.1.0"
+    helm.sh/chart: kube-janitor-policies-0.1.0
 spec:
   policyName: kube-janitor-metadata-guard
   validationActions: ["Deny"]

@@ -1,122 +1,142 @@
 # kube-janitor
 
-> [!WARNING]
-> **This controller is deprecated and frozen in report-only mode.** An audit found defects in its
-> deletion path ([migration plan, section 2](docs/plans/kyverno-migration.md#2-audit-of-the-current-go-controller)),
-> so the binary now refuses to start with `--dry-run=false`.
-> kube-janitor is moving to **kube-janitor-policies**, a Helm chart of Kyverno `DeletingPolicy`
-> resources. See [ADR-0002](docs/adr/0002-kyverno-native-cleanup.md) and the
-> [design spec](docs/specs/kyverno-policy-pack.md). The policy chart is under development and not yet published.
+**kube-janitor-policies** removes Kubernetes resources that someone explicitly marked as temporary,
+after their expiry. It is a Helm chart of [Kyverno](https://kyverno.io) `DeletingPolicy` resources:
+no controller, no image, no CRD of its own.
 
-A Kubernetes cleanup controller that continuously classifies resources and applies
-policy-driven cleanup with strong safety controls.
+- **Nothing is deleted by default.** Every pack is disabled. An enabled pack starts in **audit** mode,
+  which only reports what it would delete.
+- **Opt-in, not guesswork.** The chart never deletes a resource because it looks old or unused.
+- **Safe with GitOps.** Objects managed by Argo CD, Flux, or Helm are never deleted directly.
 
-## What it does
+Design: [ADR-0002](docs/adr/0002-kyverno-native-cleanup.md) ·
+[policy pack spec](docs/specs/kyverno-policy-pack.md) ·
+[compatibility](docs/specs/compatibility.md) ·
+[GitOps](docs/specs/gitops-integration.md) ·
+[safety and tests](docs/specs/security-and-testing.md)
 
-kube-janitor watches your cluster resources and:
-- **Classifies** each resource as active, expired, orphaned, abandoned, protected, or blocked
-- **Evaluates** JanitorPolicy CRDs to determine what action to take
-- **Reports** findings as Kubernetes Events, structured logs, and Prometheus metrics
-- ~~**Deletes** resources only when confidence is high, action mode is `Delete`, and global dry-run is disabled~~ — disabled: the controller refuses `--dry-run=false` (ADR-0002)
+## Requirements
 
-**kube-janitor runs only in dry-run mode. It never deletes anything.**
+| Component | Version |
+|-----------|---------|
+| Kyverno | 1.20.x, with the cleanup controller (default) and, for audit mode, the reports controller (default) |
+| Kubernetes | 1.34 – 1.37 (1.34 is upstream end-of-life but still supported by Kyverno 1.20) |
+| Helm | 3.8+ (tested 3.22 and 4.3) |
 
-## Supported resource kinds (Phase 1)
+No Kyverno yet? Install it first (pinned):
 
-| Kind           | TTL | Expires-At | Orphan | PR Namespace |
-|----------------|-----|------------|--------|--------------|
-| Namespace      | ✓   | ✓          | ✓      | ✓            |
-| ConfigMap      | ✓   | ✓          | ✓      | -            |
+```bash
+helm repo add kyverno https://kyverno.github.io/kyverno/
+helm install kyverno kyverno/kyverno --version 3.10.0 -n kyverno --create-namespace \
+  --set config.generateSuccessEvents=true
+```
 
 ## Quick start
 
-### Apply a policy
+```bash
+# 1. Install. All packs are disabled: this creates no policy, no RBAC, no admission rule.
+helm install kube-janitor-policies oci://ghcr.io/kaiohenricunha/charts/kube-janitor-policies \
+  --version 0.1.0 -n kube-janitor --create-namespace
 
-```yaml
-apiVersion: janitor.io/v1alpha1
-kind: JanitorPolicy
-metadata:
-  name: preview-namespace-cleanup
-spec:
-  selector:
-    kinds:
-      - group: ""
-        version: v1
-        kind: Namespace
-    namespaceSelector:
-      matchLabels:
-        env: preview
-  ttl:
-    default: 72h
-    annotation: "janitor.io/ttl"
-  prNamespace:
-    enabled: true
-    labelKey: "janitor.io/pr"
-    closedTTL: 1h
-  action:
-    mode: DryRun   # safe default — change to Delete to enable cleanup
+# 2. Enable a pack in audit mode, and read what it would delete.
+helm upgrade kube-janitor-policies oci://ghcr.io/kaiohenricunha/charts/kube-janitor-policies \
+  --version 0.1.0 -n kube-janitor --reuse-values --set packs.ephemeralPods.enabled=true
+kubectl get policyreports -A
+
+# 3. Check the cluster, then switch the pack to delete mode.
+hack/preflight.sh --kinds pods
+helm upgrade ... --reuse-values --set packs.ephemeralPods.mode=delete
 ```
 
-### Mark a resource as protected
+Verify the chart signature (keyless cosign):
 
 ```bash
-kubectl annotate namespace production janitor.io/protected=true
+cosign verify ghcr.io/kaiohenricunha/charts/kube-janitor-policies:0.1.0 \
+  --certificate-identity-regexp 'https://github.com/kaiohenricunha/kube-janitor/.github/workflows/release-policies.yml@.*' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
-### Override TTL per resource
+## Packs
+
+| Values key | Deletes | Selection | Default lifetime |
+|------------|---------|-----------|------------------|
+| `ephemeralPods` | standalone Pods | label `janitor.io/ephemeral=true` on the Pod | 24h |
+| `previewEnvironments` | Namespaces (with everything in them) | label `janitor.io/ephemeral=true` on the Namespace | 72h |
+| `temporaryConfigMaps` | standalone ConfigMaps | label `janitor.io/ephemeral=true` on the ConfigMap | 168h |
+| `completedJobsRetention` | finished standalone Jobs without `ttlSecondsAfterFinished` | label `janitor.io/job-retention=enabled` on the Namespace | 168h after the Job finished |
+
+Each pack has `enabled` (default `false`), `mode` (`audit` | `delete`, default `audit`), and its lifetime.
+See [values.yaml](charts/kube-janitor-policies/values.yaml).
+
+## Marking objects
 
 ```bash
-kubectl annotate configmap my-config janitor.io/ttl=48h
-kubectl annotate namespace feature-x janitor.io/expires-at=2025-12-31T23:59:00Z
+# A debug Pod that is deleted 8 hours from now. Use a namespace that is not protected.
+kubectl run debug-$USER -n sandbox --image=busybox -l janitor.io/ephemeral=true -- sleep infinity
+kubectl annotate pod debug-$USER -n sandbox janitor.io/expires-at="$(date -u -d '+8 hours' +%Y-%m-%dT%H:%M:%SZ)"
+
+# Never delete this object.
+kubectl label configmap important -n sandbox janitor.io/protected=true
 ```
 
-## Architecture
+| Key | Kind | Meaning |
+|-----|------|---------|
+| `janitor.io/ephemeral: "true"` | label | Opt-in: the object may be deleted after expiry. |
+| `janitor.io/expires-at` | annotation | Expiry, UTC, exactly `YYYY-MM-DDTHH:MM:SSZ`. Without it: creation time + the pack's lifetime. |
+| `janitor.io/protected: "true"` | label | Veto on the object or its namespace. |
+| `janitor.io/job-retention: enabled` | label (Namespace) | Opt-in for `completedJobsRetention`. |
 
-Classification strategy chain (priority order — first match wins):
-1. `ProtectionStrategy` — protected annotation/label/namespace?
-2. `FinalizerStrategy` — blocking finalizers?
-3. `TTLStrategy` — TTL annotation elapsed?
-4. `ExpiresAtStrategy` — expires-at timestamp past?
-5. `OwnerRefStrategy` — live ownerReference exists?
-6. `ResolverStrategy` — any resolver finds a live reference?
+## Safety model
 
-**Safety controls:**
-- `--dry-run=true` is the only accepted value. The binary exits with an error on `--dry-run=false`.
-- Confidence ≥ 0.9 required for auto-deletion.
-- Protected namespace blocklist: `kube-system`, `kube-public`, `default`, `kube-node-lease`.
-- Pre-flight check before every deletion: re-GET object, verify UID, check finalizers.
-- Foreign finalizers are never removed.
+- **Protected namespaces:** `kube-system`, `kube-public`, `kube-node-lease`, `default`, and the Kyverno namespace.
+  Values can add names (`global.extraProtectedNamespaces`) but cannot remove these.
+- **Metadata guard** (a Kubernetes `ValidatingAdmissionPolicy`, rendered when a pack is enabled):
+  only a principal that may delete an object may opt it in or set its expiry; cleanup labels are
+  rejected in protected namespaces; malformed expiry dates are rejected.
+- **Kyverno's own `cleanup.kyverno.io/ttl` label:** delete mode grants the Kyverno cleanup controller
+  delete permission on a kind, and that also arms Kyverno's TTL label for that kind in every namespace,
+  without Kyverno's namespace filters (confirmed in our end-to-end tests). The guard covers that label
+  too; keep `metadataGuard.validationActions` at `Deny` (the chart refuses otherwise), and run
+  `hack/preflight.sh` (check P8) before you switch to delete mode.
+- **GitOps:** objects with Argo CD, Flux, or Helm ownership markers are never deleted. Remove them
+  through their source of truth. See [examples/](examples/).
+- **Preview namespaces:** the identity that labels a namespace `janitor.io/ephemeral=true` must be allowed
+  to delete that namespace.
 
-## Configuration
+## Operations
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--dry-run` | `true` | Must be `true`; `false` is refused (ADR-0002) |
-| `--scan-interval` | `5m` | How often to re-scan all resources for TTL expiry |
-| `--metrics-bind-address` | `:8080` | Prometheus metrics endpoint |
-| `--health-probe-bind-address` | `:8081` | Health/readiness probe endpoint |
-| `--leader-elect` | `false` | Enable leader election for HA |
-| `--otel-endpoint` | `""` | OpenTelemetry collector endpoint (empty = disabled) |
-
-## Observability
-
-| Metric | Type | Labels |
-|--------|------|--------|
-| `janitor_resources_scanned_total` | Counter | `kind` |
-| `janitor_resources_classified_total` | Counter | `kind`, `class` |
-| `janitor_actions_total` | Counter | `kind`, `action`, `dry_run` |
-| `janitor_reconcile_duration_seconds` | Histogram | `controller` |
-| `janitor_reconcile_errors_total` | Counter | `controller`, `kind` |
-| `janitor_policy_evaluations_total` | Counter | `policy`, `action` |
+| Task | How |
+|------|-----|
+| Check prerequisites | `hack/preflight.sh` (checks P1–P8; exit 1 on any FAIL) |
+| See what would be deleted | audit mode → `kubectl get policyreports,clusterpolicyreports -A` |
+| Alerts | `--set monitoring.prometheusRule.enabled=true` (Prometheus Operator) |
+| Emergency stop | `helm upgrade ... --reuse-values --set packs.<pack>.mode=audit` |
+| Uninstall | `helm uninstall` removes the policies, RBAC, and guard. It deletes no user object. |
+| Argo CD shows `DeletingPolicy` Degraded | Kyverno 1.20 never sets Ready (kyverno#18813): apply [examples/argocd/argocd-cm-deletingpolicy-health.yaml](examples/argocd/argocd-cm-deletingpolicy-health.yaml) |
 
 ## Development
 
 ```bash
-make tools        # install controller-gen, golangci-lint, setup-envtest
-make test         # unit tests with race detector
-make lint         # golangci-lint
-make run          # run locally against current cluster (dry-run by default)
-make docker-build # build container image
+hack/install-tools.sh               # pinned Kyverno CLI, kind, Chainsaw into ./bin
+tests/kyverno/run.sh                # policy unit tests (kyverno test)
+python3 tests/helm/test_chart.py    # Helm render tests
+tests/e2e/run.sh                    # kind + Kyverno end-to-end (about 30 minutes)
+tests/gitops/run.sh                 # Argo CD + Flux end-to-end (needs the commit pushed)
+```
+
+Releases: push the tag `kube-janitor-policies-v<version>` that matches `charts/kube-janitor-policies/Chart.yaml`;
+[release-policies.yml](.github/workflows/release-policies.yml) tests, publishes, and signs the chart.
+
+## The deprecated Go controller
+
+The original controller (`cmd/manager`, `charts/kube-janitor`) is **deprecated and frozen in report-only mode**.
+An audit found defects in its deletion path ([migration plan, section 2](docs/plans/kyverno-migration.md#2-audit-of-the-current-go-controller)),
+so the binary refuses to start with `--dry-run=false`. Its resolver code may become an optional,
+report-only analyzer later ([migration plan, Phase 4](docs/plans/kyverno-migration.md#phase-4--optional-report-only-analyzer-remove-the-controller)).
+
+```bash
+make test   # Go unit tests
+make lint   # golangci-lint
 ```
 
 ## License

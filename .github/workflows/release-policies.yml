@@ -1,0 +1,99 @@
+name: Release (kube-janitor-policies)
+
+# Publishes the policy chart when a tag kube-janitor-policies-v<semver> is pushed.
+# Gate: the full Policies workflow (kyverno test, Helm 3/4 render tests, e2e on
+# Kubernetes 1.34-1.37). Then: package, push to GHCR (OCI), cosign sign + verify (keyless),
+# Artifact Hub metadata, GitHub release with the chart and a rendered audit-mode example.
+# docs/specs/kyverno-policy-pack.md section 8A.3.
+
+on:
+  push:
+    tags:
+      - "kube-janitor-policies-v*"
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    uses: ./.github/workflows/policies.yml
+
+  publish:
+    needs: tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # GitHub release
+      packages: write   # push the chart to GHCR
+      id-token: write   # keyless cosign signing
+    env:
+      CHART: charts/kube-janitor-policies
+      REGISTRY: ghcr.io/${{ github.repository_owner }}/charts
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: azure/setup-helm@2f5e7bc67f1f9972ab16657bb795f36d8f04de0e # v5.1.0
+        with:
+          version: v3.22.1
+      - uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
+      - uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1.2.4
+
+      - name: Check that the tag matches Chart.yaml
+        run: |
+          version="${GITHUB_REF_NAME#kube-janitor-policies-v}"
+          chart_version="$(awk '/^version:/ {print $2}' "$CHART/Chart.yaml")"
+          if [ "$version" != "$chart_version" ]; then
+            echo "tag $GITHUB_REF_NAME does not match Chart.yaml version $chart_version"; exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Package
+        run: helm package "$CHART" --destination dist
+
+      - name: Log in to GHCR
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "$TOKEN" | helm registry login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          echo "$TOKEN" | cosign login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          echo "$TOKEN" | oras login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+
+      - name: Push the chart (OCI)
+        id: push
+        run: |
+          out="$(helm push "dist/kube-janitor-policies-$VERSION.tgz" "oci://$REGISTRY" 2>&1)"
+          echo "$out"
+          digest="$(sed -n 's/^Digest: //p' <<<"$out")"
+          [ -n "$digest" ] || { echo "no digest in helm push output"; exit 1; }
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Sign the pushed digest (keyless)
+        run: cosign sign --yes "$REGISTRY/kube-janitor-policies@${{ steps.push.outputs.digest }}"
+
+      - name: Verify the signature
+        run: |
+          cosign verify \
+            --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/release-policies.yml@${{ github.ref }}" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            "$REGISTRY/kube-janitor-policies@${{ steps.push.outputs.digest }}"
+
+      - name: Push Artifact Hub repository metadata
+        working-directory: charts/kube-janitor-policies
+        run: |
+          oras push "$REGISTRY/kube-janitor-policies:artifacthub.io" \
+            --config /dev/null:application/vnd.cncf.artifacthub.config.v1+yaml \
+            artifacthub-repo.yml:application/vnd.cncf.artifacthub.repository-metadata.layer.v1.yaml
+
+      - name: Render release assets
+        run: |
+          helm template kube-janitor-policies "dist/kube-janitor-policies-$VERSION.tgz" \
+            --namespace kube-janitor --api-versions policies.kyverno.io/v1 \
+            -f "$CHART/ci/audit.yaml" > "dist/kube-janitor-policies-$VERSION-all-packs-audit.yaml"
+          awk -v v="## $VERSION" '$0 == v {p=1; next} /^## / && p {exit} p' "$CHART/CHANGELOG.md" > dist/notes.md
+          [ -s dist/notes.md ] || { echo "CHANGELOG.md has no section for $VERSION"; exit 1; }
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --verify-tag \
+            --title "kube-janitor-policies $VERSION" --notes-file dist/notes.md \
+            "dist/kube-janitor-policies-$VERSION.tgz" "dist/kube-janitor-policies-$VERSION-all-packs-audit.yaml"
