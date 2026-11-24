@@ -121,6 +121,44 @@ func TestExecutor_ProtectedNamespaceBlocksDeletion(t *testing.T) {
 	require.NoError(t, err, "resource must still exist after blocked deletion attempt")
 }
 
+// badCopyConfigMap is a ConfigMap whose DeepCopyObject returns a value that is
+// not a client.Object. It exercises the executor's checked type assertion.
+type badCopyConfigMap struct {
+	corev1.ConfigMap
+}
+
+func (b *badCopyConfigMap) DeepCopyObject() runtime.Object { return &metav1.Status{} }
+
+func TestExecutor_DeepCopyNotClientObjectReturnsError(t *testing.T) {
+	// Safety spec: a copy that is not a client.Object must stop the deletion
+	// with an error. It must not panic, and it must not delete anything.
+	metrics.Register()
+
+	cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cm", Namespace: "test", UID: "uid-cm"}}
+	s := runtime.NewScheme()
+	require.NoError(t, corev1.AddToScheme(s))
+	fakeClient := fake.NewClientBuilder().WithScheme(s).WithObjects(cm).Build()
+
+	exec := action.NewDefaultExecutor(fakeClient, fakeClient,
+		log.FromContext(context.Background()), metrics.DefaultRecorder(), nil)
+
+	finding := domain.Finding{
+		ObjectRef: domain.ObjectRef{Kind: "ConfigMap", Namespace: "test", Name: "cm", UID: "uid-cm"},
+		Class:     domain.ClassExpired,
+	}
+	decision := domain.ActionDecision{Action: domain.ActionDelete, DryRun: false}
+
+	var err error
+	require.NotPanics(t, func() {
+		err = exec.Execute(context.Background(), &badCopyConfigMap{ConfigMap: *cm}, finding, decision)
+	})
+	require.Error(t, err)
+
+	var verify corev1.ConfigMap
+	require.NoError(t, fakeClient.Get(context.Background(), types.NamespacedName{Name: "cm", Namespace: "test"}, &verify),
+		"resource must still exist after a failed copy")
+}
+
 func TestExecutor_ActionNoneDoesNothing(t *testing.T) {
 	// Spec: ActionNone must be a complete no-op.
 	metrics.Register()

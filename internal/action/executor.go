@@ -31,11 +31,11 @@ type Executor interface {
 //  4. Verify no blocking finalizers exist.
 //  5. Verify the object is not in a protected namespace.
 type DefaultExecutor struct {
-	client           client.Client
-	apiReader        client.Reader // direct API server reads, bypasses cache
-	log              logr.Logger
-	metrics          *metrics.Recorder
-	protectedNS      map[string]struct{}
+	client      client.Client
+	apiReader   client.Reader // direct API server reads, bypasses cache
+	log         logr.Logger
+	metrics     *metrics.Recorder
+	protectedNS map[string]struct{}
 }
 
 // NewDefaultExecutor creates a DefaultExecutor.
@@ -117,7 +117,10 @@ func (e *DefaultExecutor) delete(
 	}
 
 	// Pre-flight check 2: re-GET the object from the API server (not cache).
-	fresh := obj.DeepCopyObject().(client.Object)
+	fresh, ok := obj.DeepCopyObject().(client.Object)
+	if !ok {
+		return fmt.Errorf("SAFETY: copy of %s is not a client.Object; skipping deletion", ref)
+	}
 	err := e.apiReader.Get(ctx, types.NamespacedName{
 		Namespace: ref.Namespace,
 		Name:      ref.Name,
