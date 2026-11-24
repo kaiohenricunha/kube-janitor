@@ -86,6 +86,16 @@ if git -C "$root" cat-file -e "$previous_ref:charts/kube-janitor-policies/Chart.
     || fail "E11: upgrade changed delete RBAC"
   run_chainsaw 05-upgrade
   helm uninstall kjp -n kube-janitor --wait
+  # The API server enforces ValidatingAdmissionPolicies from a cache, so a deleted guard can
+  # still reject requests for a short time after `helm uninstall --wait` returns. Wait until a
+  # request that the guard would reject (cleanup label in `default`) is admitted again.
+  admitted=0
+  for _ in $(seq 1 24); do
+    if kubectl -n default run guard-gone-probe --image=registry.k8s.io/pause:3.10 \
+         --labels=janitor.io/ephemeral=true --dry-run=server >/dev/null 2>&1; then admitted=1; break; fi
+    sleep 5
+  done
+  [ "$admitted" -eq 1 ] || fail "E11: the guard still rejects requests 120s after uninstall"
 else
   echo "SKIP E11: $previous_ref has no kube-janitor-policies chart yet"
 fi
