@@ -1,0 +1,25 @@
+# Audit mode (spec section 7): nothing is deleted, the audit ValidatingPolicy reports
+# "would delete" as a PolicyReport fail result, and the cleanup.kyverno.io/ttl label is not
+# armed because no delete RBAC exists yet (E16a).
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: audit-mode
+spec:
+  timeouts:
+    assert: 4m
+  steps:
+    - name: create-pods
+      try:
+        - apply:
+            file: pods.yaml
+    - name: report-says-would-delete
+      try:
+        - assert:
+            file: report-assert.yaml
+    - name: nothing-deleted-after-three-minutes
+      try:
+        - sleep:
+            duration: 3m
+        - assert:
+            file: pods-present.yaml

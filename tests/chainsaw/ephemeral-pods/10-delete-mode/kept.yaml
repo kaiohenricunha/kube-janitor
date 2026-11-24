@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: e3-protected
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: e5-no-optin
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: e6-argocd
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: e6-flux
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: e2-future

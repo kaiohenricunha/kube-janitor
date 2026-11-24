@@ -1,0 +1,62 @@
+# Metadata guard (spec security-and-testing section 4): E7, E8, E16c, G-FMT, G-PROT.
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: metadata-guard
+spec:
+  timeouts:
+    exec: 3m
+  steps:
+    - name: setup
+      try:
+        - apply:
+            file: patcher.yaml
+        - apply:
+            file: target.yaml
+    - name: e7-opt-in-without-delete-permission-denied
+      try:
+        - script:
+            content: kubectl -n $NAMESPACE label pod g-target janitor.io/ephemeral=true --as=system:serviceaccount:$NAMESPACE:patcher
+            check:
+              ($error != null): true
+              (contains($stderr, 'G-OPT')): true
+    - name: e8-ttl-label-without-delete-permission-denied
+      try:
+        - script:
+            content: kubectl -n $NAMESPACE label pod g-target cleanup.kyverno.io/ttl=1m --as=system:serviceaccount:$NAMESPACE:patcher
+            check:
+              ($error != null): true
+              (contains($stderr, 'G-OPT')): true
+    - name: unrelated-label-still-allowed
+      try:
+        - script:
+            content: kubectl -n $NAMESPACE label pod g-target janitor.io/owner=e2e --as=system:serviceaccount:$NAMESPACE:patcher
+            check:
+              ($error): ~
+    - name: e16c-ttl-label-in-protected-namespace-denied
+      try:
+        - script:
+            content: kubectl -n kube-system run g-ks --image=registry.k8s.io/pause:3.10 --labels=cleanup.kyverno.io/ttl=1m --dry-run=server
+            check:
+              ($error != null): true
+              (contains($stderr, 'G-NS')): true
+    - name: invalid-expiry-date-denied
+      try:
+        - script:
+            content: kubectl -n $NAMESPACE annotate pod g-target janitor.io/expires-at=2026-02-30T00:00:00Z
+            check:
+              ($error != null): true
+              (contains($stderr, 'G-FMT')): true
+    - name: authorized-opt-in-allowed
+      try:
+        - script:
+            content: kubectl -n $NAMESPACE label pod g-target janitor.io/ephemeral=true janitor.io/protected=true && kubectl -n $NAMESPACE annotate pod g-target janitor.io/expires-at=2999-01-01T00:00:00Z
+            check:
+              ($error): ~
+    - name: protection-removal-without-delete-permission-denied
+      try:
+        - script:
+            content: kubectl -n $NAMESPACE label pod g-target janitor.io/protected- --as=system:serviceaccount:$NAMESPACE:patcher
+            check:
+              ($error != null): true
+              (contains($stderr, 'G-PROT')): true

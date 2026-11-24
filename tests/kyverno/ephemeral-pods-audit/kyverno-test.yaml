@@ -1,0 +1,49 @@
+# Rendered policies are placed next to this file by tests/kyverno/run.sh
+# (helm template --show-only, see suite.env). Do not commit policy.yaml.
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: ephemeral-pods-audit
+policies:
+- policy.yaml
+resources:
+- ../ephemeral-pods/resources.yaml
+variables: ../ephemeral-pods/values.yaml
+results:
+- isValidatingPolicy: true
+  kind: Pod
+  policy: kube-janitor-ephemeral-pods-audit
+  resources:
+  - team-a/k02-expired
+  - team-a/k15-default-ttl-old
+  - team-a/k12d-feb29-leap
+  - team-a/k12g-dec31
+  result: fail
+- isValidatingPolicy: true
+  kind: Pod
+  policy: kube-janitor-ephemeral-pods-audit
+  resources:
+  - team-a/k07-argocd
+  - team-a/k08-flux-kustomize
+  - team-a/k09-flux-helm
+  - team-a/k10-helm
+  - team-a/k11-future
+  - team-a/k12a-garbage
+  - team-a/k12b-badmonth
+  - team-a/k12c-feb30
+  - team-a/k12e-feb29-nonleap
+  - team-a/k12f-apr31
+  - team-a/k12h-1900-feb29
+  - team-a/k13-owned
+  - team-a/k14-terminating
+  - team-a/k16-default-ttl-new
+  result: pass
+- isValidatingPolicy: true
+  kind: Pod
+  policy: kube-janitor-ephemeral-pods-audit
+  resources:
+  - team-a/k01-no-optin
+  - default/k03-default-ns
+  - team-a/k05-protected-label
+  - prot-ns/k06-protected-ns
+  result: skip

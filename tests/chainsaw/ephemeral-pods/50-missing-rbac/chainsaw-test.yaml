@@ -1,0 +1,41 @@
+# E10: missing cleanup-controller permission is detected (preflight P4 FAIL) and nothing is
+# deleted. Restoring the chart's ClusterRole restores deletion.
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: missing-rbac
+spec:
+  timeouts:
+    exec: 3m
+    error: 4m
+    assert: 1m
+  steps:
+    - name: remove-aggregated-role
+      try:
+        - delete:
+            file: role-ref.yaml
+    - name: preflight-detects-it
+      try:
+        - script:
+            content: $REPO_ROOT/hack/preflight.sh
+            check:
+              ($error != null): true
+              (contains($stdout, 'P4   FAIL')): true
+    - name: expired-pod-not-deleted-without-rbac
+      try:
+        - apply:
+            file: pod.yaml
+        - sleep:
+            duration: 2m10s
+        - assert:
+            file: pod-ref.yaml
+    - name: restore-role-and-pod-is-deleted
+      try:
+        - script:
+            content: helm upgrade kjp $REPO_ROOT/charts/kube-janitor-policies -n kube-janitor --reuse-values
+            check:
+              ($error): ~
+        - assert:
+            file: role-ref.yaml
+        - error:
+            file: pod-ref.yaml

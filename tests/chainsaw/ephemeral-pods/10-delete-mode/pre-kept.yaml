@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: e13-feb30
+  namespace: e2e-pre
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: e3-default-optin
+  namespace: default

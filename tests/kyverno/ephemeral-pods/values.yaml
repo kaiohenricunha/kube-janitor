@@ -1,0 +1,24 @@
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Value
+metadata:
+  name: values
+namespaces:
+- apiVersion: v1
+  kind: Namespace
+  metadata:
+    name: team-a
+    labels:
+      kubernetes.io/metadata.name: team-a
+- apiVersion: v1
+  kind: Namespace
+  metadata:
+    name: default
+    labels:
+      kubernetes.io/metadata.name: default
+- apiVersion: v1
+  kind: Namespace
+  metadata:
+    name: prot-ns
+    labels:
+      kubernetes.io/metadata.name: prot-ns
+      janitor.io/protected: 'true'

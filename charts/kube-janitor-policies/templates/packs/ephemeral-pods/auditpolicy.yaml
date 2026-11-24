@@ -1,0 +1,4 @@
+{{- $pack := .Values.packs.ephemeralPods -}}
+{{- if and $pack.enabled (eq $pack.mode "audit") }}
+{{ include "kjp.auditPolicy" (dict "root" $ "key" "ephemeralPods") }}
+{{- end }}

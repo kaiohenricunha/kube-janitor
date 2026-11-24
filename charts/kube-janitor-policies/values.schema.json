@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "kube-janitor-policies values",
+  "type": "object",
+  "additionalProperties": false,
+  "definitions": {
+    "duration": {
+      "type": "string",
+      "description": "Go duration in whole hours or minutes, at least 1m (for example 24h, 90m).",
+      "pattern": "^[1-9][0-9]*(h|m)$"
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["audit", "delete"]
+    },
+    "schedule": {
+      "type": "string",
+      "description": "Cron schedule. Empty means global.schedule."
+    },
+    "ttlPack": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "mode", "defaultTTL"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "mode": { "$ref": "#/definitions/mode" },
+        "defaultTTL": { "$ref": "#/definitions/duration" },
+        "schedule": { "$ref": "#/definitions/schedule" }
+      }
+    },
+    "actions": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "enum": ["Deny", "Warn", "Audit"] }
+    },
+    "namespaceName": {
+      "type": "string",
+      "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+      "maxLength": 63
+    }
+  },
+  "properties": {
+    "global": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kyvernoNamespace", "schedule", "deletionPropagationPolicy"],
+      "properties": {
+        "kyvernoNamespace": { "$ref": "#/definitions/namespaceName" },
+        "extraProtectedNamespaces": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/definitions/namespaceName" }
+        },
+        "schedule": { "type": "string", "minLength": 1 },
+        "deletionPropagationPolicy": { "type": "string", "enum": ["Background", "Foreground", "Orphan"] }
+      }
+    },
+    "packs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ephemeralPods", "previewEnvironments", "temporaryConfigMaps", "completedJobsRetention"],
+      "properties": {
+        "ephemeralPods": { "$ref": "#/definitions/ttlPack" },
+        "previewEnvironments": { "$ref": "#/definitions/ttlPack" },
+        "temporaryConfigMaps": { "$ref": "#/definitions/ttlPack" },
+        "completedJobsRetention": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "mode", "retention"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "mode": { "$ref": "#/definitions/mode" },
+            "retention": { "$ref": "#/definitions/duration" },
+            "schedule": { "$ref": "#/definitions/schedule" }
+          }
+        }
+      }
+    },
+    "metadataGuard": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "validationActions": { "$ref": "#/definitions/actions" },
+        "mixedOwnership": { "$ref": "#/definitions/actions" }
+      }
+    },
+    "preflight": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "helmTest": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "enabled": { "type": "boolean" } }
+        }
+      }
+    },
+    "monitoring": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "prometheusRule": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "enabled": { "type": "boolean" } }
+        }
+      }
+    }
+  }
+}

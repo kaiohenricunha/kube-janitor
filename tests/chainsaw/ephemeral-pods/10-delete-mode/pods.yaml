@@ -1,0 +1,101 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: e2-expired
+  labels:
+    janitor.io/ephemeral: 'true'
+  annotations:
+    janitor.io/expires-at: '2000-01-01T00:00:00Z'
+spec:
+  terminationGracePeriodSeconds: 0
+  containers:
+  - name: pause
+    image: registry.k8s.io/pause:3.10
+    imagePullPolicy: IfNotPresent
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: e2-default-ttl
+  labels:
+    janitor.io/ephemeral: 'true'
+spec:
+  terminationGracePeriodSeconds: 0
+  containers:
+  - name: pause
+    image: registry.k8s.io/pause:3.10
+    imagePullPolicy: IfNotPresent
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: e3-protected
+  labels:
+    janitor.io/ephemeral: 'true'
+    janitor.io/protected: 'true'
+  annotations:
+    janitor.io/expires-at: '2000-01-01T00:00:00Z'
+spec:
+  terminationGracePeriodSeconds: 0
+  containers:
+  - name: pause
+    image: registry.k8s.io/pause:3.10
+    imagePullPolicy: IfNotPresent
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: e5-no-optin
+spec:
+  terminationGracePeriodSeconds: 0
+  containers:
+  - name: pause
+    image: registry.k8s.io/pause:3.10
+    imagePullPolicy: IfNotPresent
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: e6-argocd
+  labels:
+    janitor.io/ephemeral: 'true'
+  annotations:
+    janitor.io/expires-at: '2000-01-01T00:00:00Z'
+    argocd.argoproj.io/tracking-id: demo:/Pod:x/e6-argocd
+spec:
+  terminationGracePeriodSeconds: 0
+  containers:
+  - name: pause
+    image: registry.k8s.io/pause:3.10
+    imagePullPolicy: IfNotPresent
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: e6-flux
+  labels:
+    janitor.io/ephemeral: 'true'
+    kustomize.toolkit.fluxcd.io/name: demo
+  annotations:
+    janitor.io/expires-at: '2000-01-01T00:00:00Z'
+spec:
+  terminationGracePeriodSeconds: 0
+  containers:
+  - name: pause
+    image: registry.k8s.io/pause:3.10
+    imagePullPolicy: IfNotPresent
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: e2-future
+  labels:
+    janitor.io/ephemeral: 'true'
+  annotations:
+    janitor.io/expires-at: '2999-01-01T00:00:00Z'
+spec:
+  terminationGracePeriodSeconds: 0
+  containers:
+  - name: pause
+    image: registry.k8s.io/pause:3.10
+    imagePullPolicy: IfNotPresent

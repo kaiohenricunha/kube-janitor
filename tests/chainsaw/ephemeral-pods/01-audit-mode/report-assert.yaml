@@ -1,0 +1,6 @@
+apiVersion: wgpolicyk8s.io/v1alpha2
+kind: PolicyReport
+scope:
+  kind: Pod
+  name: a-expired
+(results[?policy == 'kube-janitor-ephemeral-pods-audit'] | [0].result): fail

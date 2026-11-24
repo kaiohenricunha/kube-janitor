@@ -1,0 +1,22 @@
+# E15: delete RBAC follows delete-mode packs only. With only ephemeralPods in delete mode,
+# the cleanup controller may delete Pods but not ConfigMaps, Namespaces, or Jobs.
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: rbac-scope
+spec:
+  timeouts:
+    exec: 3m
+  steps:
+    - name: subject-access-reviews
+      try:
+        - script:
+            content: |
+              sar() { kubectl create -o jsonpath='{.status.allowed}' -f - <<EOF
+              {"apiVersion":"authorization.k8s.io/v1","kind":"SubjectAccessReview","spec":{"user":"system:serviceaccount:kyverno:kyverno-cleanup-controller","groups":["system:serviceaccounts","system:serviceaccounts:kyverno","system:authenticated"],"resourceAttributes":{"group":"$1","resource":"$2","verb":"delete"}}}
+              EOF
+              echo; }
+              echo "pods=$(sar '' pods) configmaps=$(sar '' configmaps) namespaces=$(sar '' namespaces) jobs=$(sar batch jobs)"
+            check:
+              ($error): ~
+              (contains($stdout, 'pods=true configmaps=false namespaces=false jobs=false')): true
