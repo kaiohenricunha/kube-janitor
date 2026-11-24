@@ -74,7 +74,7 @@ Register new resolvers in `cmd/manager/main.go` and add a spec in `docs/specs/<k
 
 ## Housekeeping / Quality
 
-- [ ] **`golangci-lint` clean pass** — run `make lint` and fix any issues (godot comments, unused exports, etc.)
+- [x] **`golangci-lint` clean pass** — `make lint` passes with golangci-lint v2.15.0 (0 issues)
 - [ ] **`go vet` shadow check** — `govet` shadow linter is enabled; audit all reconciler loops
 - [ ] **Fuzz targets** — `TTLStrategy` duration parsing and `ExpiresAtStrategy` timestamp parsing are good candidates
 - [ ] **RBAC audit** — verify `charts/kube-janitor/templates/rbac.yaml` covers all resource kinds the reconcilers watch (Secrets, PVCs once Phase 3 lands)

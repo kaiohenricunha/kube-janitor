@@ -21,7 +21,7 @@ IMAGE           := $(IMAGE_REGISTRY)/$(PROJECT_NAME):$(IMAGE_TAG)
 
 # Tool versions — pin for reproducibility
 CONTROLLER_GEN_VERSION := v0.16.3
-GOLANGCI_LINT_VERSION  := v1.61.0
+GOLANGCI_LINT_VERSION  := v2.15.0
 ENVTEST_VERSION        := release-0.19
 
 # Directories
@@ -156,7 +156,7 @@ $(TOOLS_DIR)/controller-gen:
 
 $(TOOLS_DIR)/golangci-lint:
 	@mkdir -p $(TOOLS_DIR)
-	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh \
+	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh \
 		| sh -s -- -b $(PWD)/$(TOOLS_DIR) $(GOLANGCI_LINT_VERSION)
 
 $(TOOLS_DIR)/setup-envtest:

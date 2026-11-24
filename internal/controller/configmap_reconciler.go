@@ -56,7 +56,7 @@ func (r *ConfigMapReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		r.Metrics.RecordReconcileError("configmap", "ConfigMap")
 		return ctrl.Result{}, fmt.Errorf("classifying configmap %s: %w", req.NamespacedName, err)
 	}
-	finding.ReconcileID = req.NamespacedName.String()
+	finding.ReconcileID = req.String()
 	r.Metrics.RecordClassification("ConfigMap", string(finding.Class))
 
 	log.V(1).Info("classified", "class", finding.Class, "confidence", finding.Confidence)

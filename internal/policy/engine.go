@@ -21,7 +21,7 @@ import (
 
 const (
 	// annotationActionOverride allows per-resource action override.
-	// Values: "skip", "delete", "report"
+	// Values: "skip", "delete", "report".
 	annotationActionOverride = "janitor.io/action"
 
 	// defaultDeleteConfidenceThreshold is the minimum confidence required for deletion

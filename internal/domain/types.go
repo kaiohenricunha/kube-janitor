@@ -157,13 +157,13 @@ type ActionDecision struct {
 type ReferenceType string
 
 const (
-	RefTypeOwnerRef      ReferenceType = "ownerRef"
-	RefTypeLabelSelector ReferenceType = "labelSelector"
-	RefTypeVolumeMount   ReferenceType = "volumeMount"
-	RefTypeEnvFrom       ReferenceType = "envFrom"
-	RefTypeServiceAccount ReferenceType = "serviceAccount"
+	RefTypeOwnerRef        ReferenceType = "ownerRef"
+	RefTypeLabelSelector   ReferenceType = "labelSelector"
+	RefTypeVolumeMount     ReferenceType = "volumeMount"
+	RefTypeEnvFrom         ReferenceType = "envFrom"
+	RefTypeServiceAccount  ReferenceType = "serviceAccount"
 	RefTypeImagePullSecret ReferenceType = "imagePullSecret"
-	RefTypeEndpoint      ReferenceType = "endpoint"
+	RefTypeEndpoint        ReferenceType = "endpoint"
 )
 
 // Reference represents a directional relationship between two Kubernetes objects.

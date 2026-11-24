@@ -24,16 +24,16 @@ type Reporter interface {
 type EventReason string
 
 const (
-	ReasonClassified    EventReason = "Classified"
-	ReasonDryRunDelete  EventReason = "DryRunDelete"
-	ReasonDeleted       EventReason = "Deleted"
-	ReasonProtected     EventReason = "Protected"
-	ReasonBlocked       EventReason = "Blocked"
-	ReasonTTLExpired    EventReason = "TTLExpired"
-	ReasonOrphaned      EventReason = "Orphaned"
-	ReasonAbandoned     EventReason = "Abandoned"
-	ReasonPRClosed      EventReason = "PRNamespaceClosed"
-	ReasonError         EventReason = "Error"
+	ReasonClassified   EventReason = "Classified"
+	ReasonDryRunDelete EventReason = "DryRunDelete"
+	ReasonDeleted      EventReason = "Deleted"
+	ReasonProtected    EventReason = "Protected"
+	ReasonBlocked      EventReason = "Blocked"
+	ReasonTTLExpired   EventReason = "TTLExpired"
+	ReasonOrphaned     EventReason = "Orphaned"
+	ReasonAbandoned    EventReason = "Abandoned"
+	ReasonPRClosed     EventReason = "PRNamespaceClosed"
+	ReasonError        EventReason = "Error"
 )
 
 // EventReporter emits Kubernetes Events for findings.
