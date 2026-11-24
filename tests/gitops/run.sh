@@ -166,7 +166,8 @@ spec:
     spec:
       chart: ./charts/kube-janitor-policies
       sourceRef: {kind: GitRepository, name: kjp-repo}
-      valuesFiles: [./charts/kube-janitor-policies/ci/e2e.yaml]
+      # Flux valuesFiles REPLACE the chart's values.yaml; list it first (R36).
+      valuesFiles: [./charts/kube-janitor-policies/values.yaml, ./charts/kube-janitor-policies/ci/e2e.yaml]
 EOF
 wait_for 300 "HelmRelease kjp ready" kubectl -n flux-system wait helmrelease/kjp --for=condition=Ready --timeout=5s
 [ "$(dpol_count)" -eq 4 ] || fail "GO5b: expected 4 DeletingPolicies, got $(dpol_count)"

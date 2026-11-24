@@ -27,6 +27,9 @@ spec:
   chartRef:
     kind: OCIRepository
     name: kube-janitor-policies
+  # Inline `values` are merged over the chart's defaults. If you use chart.spec.valuesFiles with a
+  # GitRepository instead, list ./charts/kube-janitor-policies/values.yaml first: Flux valuesFiles
+  # replace the chart's values.yaml, and the chart's schema then rejects the partial values.
   values:
     packs:
       ephemeralPods:
