@@ -28,7 +28,9 @@ spec:
         - assert:
             file: native-ref.yaml
         - script:
-            content: kubectl -n $NAMESPACE get jobs -o json | jq '[.items[] | select(.metadata.ownerReferences[0].kind == "CronJob")] | length'
+            content: |
+              n=$(kubectl -n $NAMESPACE get jobs -o json | jq '[.items[] | select(.metadata.ownerReferences[0].kind == "CronJob")] | length')
+              echo "cronjob-owned jobs: $n"
+              [ "$n" -ge 1 ]
             check:
               ($error): ~
-              (to_number(trim($stdout)) >= `1`): true

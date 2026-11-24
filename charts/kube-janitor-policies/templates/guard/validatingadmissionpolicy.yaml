@@ -75,7 +75,7 @@ spec:
     - name: inProtectedNamespace
       expression: {{ printf "variables.targetNamespace in %s" $protected | quote }}
     - name: canDelete
-      expression: "request.resource.resource == 'namespaces' ? authorizer.group('').resource('namespaces').name(object.metadata.name).check('delete').allowed() : authorizer.group(request.resource.group).resource(request.resource.resource).namespace(request.namespace).name(object.metadata.name).check('delete').allowed()"
+      expression: "request.resource.resource == 'namespaces' ? authorizer.group('').resource('namespaces').namespace(object.metadata.name).name(object.metadata.name).check('delete').allowed() : authorizer.group(request.resource.group).resource(request.resource.resource).namespace(request.namespace).name(object.metadata.name).check('delete').allowed()"
     - name: canDeleteJobsHere
       expression: "authorizer.group('batch').resource('jobs').namespace(variables.targetNamespace).check('delete').allowed()"
     - name: expiryValid
