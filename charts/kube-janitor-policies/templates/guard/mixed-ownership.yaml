@@ -1,0 +1,38 @@
+{{- if .Values.packs.previewEnvironments.enabled }}
+{{- $marker := "object.metadata.?annotations.orValue({}).exists(k, k == 'argocd.argoproj.io/tracking-id' || k.startsWith('meta.helm.sh/')) || object.metadata.?labels.orValue({}).exists(k, k.startsWith('kustomize.toolkit.fluxcd.io/') || k.startsWith('helm.toolkit.fluxcd.io/') || k == 'app.kubernetes.io/instance' || k == 'argocd.argoproj.io/instance') || object.metadata.?labels.orValue({})[?'app.kubernetes.io/managed-by'].orValue('') == 'Helm'" }}
+# G-MIX (docs/specs/gitops-integration.md section 6): warn when an object with a GitOps or Helm
+# manager marker is created in a Namespace that is opted in for deletion. The Namespace is
+# still deleted at its expiry, with its GitOps content.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: kube-janitor-mixed-ownership
+  labels:
+    {{- include "kjp.labels" . | nindent 4 }}
+spec:
+  failurePolicy: Ignore
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["*"]
+        apiVersions: ["*"]
+        resources: ["*"]
+        operations: ["CREATE"]
+        scope: Namespaced
+  matchConditions:
+    - name: has-manager-marker
+      expression: {{ $marker | quote }}
+  validations:
+    - expression: "namespaceObject == null || namespaceObject.metadata.?labels.orValue({})[?'janitor.io/ephemeral'].orValue('') != 'true'"
+      messageExpression: "'kube-janitor guard G-MIX: this GitOps- or Helm-managed object is created in namespace ' + request.namespace + ', which is labeled janitor.io/ephemeral=true and will be deleted at its expiry. Remove the label, or let the GitOps tool own the namespace.'"
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: kube-janitor-mixed-ownership
+  labels:
+    {{- include "kjp.labels" . | nindent 4 }}
+spec:
+  policyName: kube-janitor-mixed-ownership
+  validationActions: {{ toJson .Values.metadataGuard.mixedOwnership }}
+{{- end }}

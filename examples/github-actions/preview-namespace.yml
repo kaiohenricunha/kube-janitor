@@ -1,0 +1,30 @@
+# Pattern A (docs/specs/gitops-integration.md section 5.2): CI owns the preview namespace.
+# It is created with an expiry; when the PR closes, the expiry is moved to one hour from now.
+# The CI identity must be allowed to delete the namespace (metadata guard rule G-OPT).
+name: preview
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+permissions:
+  contents: read
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    env:
+      NS: pr-${{ github.event.number }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Configure cluster credentials here (kubeconfig or cloud login).
+      - name: Create or refresh the preview namespace
+        if: github.event.action != 'closed'
+        run: |
+          kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f -
+          kubectl label namespace "$NS" --overwrite janitor.io/ephemeral=true "janitor.io/owner=gha-${{ github.repository_id }}"
+          kubectl annotate namespace "$NS" --overwrite \
+            janitor.io/expires-at="$(date -u -d '+72 hours' +%Y-%m-%dT%H:%M:%SZ)"
+          helm upgrade --install app ./chart -n "$NS"
+      - name: Expire the preview namespace one hour after the PR closes
+        if: github.event.action == 'closed'
+        run: |
+          kubectl annotate namespace "$NS" --overwrite \
+            janitor.io/expires-at="$(date -u -d '+1 hour' +%Y-%m-%dT%H:%M:%SZ)"

@@ -225,7 +225,7 @@ charts/kube-janitor-policies/ci/{default,audit,delete,e2e}.yaml
 tests/versions.env
 tests/golden/*.yaml
 tests/kyverno/ephemeral-pods/**
-tests/chainsaw/ephemeral-pods/**
+tests/chainsaw/packs/**
 hack/preflight.sh
 .github/workflows/policies.yml
 ```
@@ -241,7 +241,7 @@ helm lint --strict charts/kube-janitor-policies
 helm template t charts/kube-janitor-policies --api-versions policies.kyverno.io/v1 \
   | diff - tests/golden/default.yaml
 kyverno test tests/kyverno/ephemeral-pods
-chainsaw test tests/chainsaw/ephemeral-pods      # on kind 1.37 with Kyverno chart 3.10.0
+chainsaw test tests/chainsaw/packs      # on kind 1.37 with Kyverno chart 3.10.0
 hack/preflight.sh                                  # against the same kind cluster
 ```
 
@@ -273,13 +273,26 @@ text that the final PR must change.
 | R8 | §7 audit mode: `ValidatingPolicy` with `time.now()` and `namespaceObject` | **Compiles; verdicts equal the delete policy (A1)** in the CLI. In-cluster background reporting: see R11. | `tests/kyverno/ephemeral-pods-audit` 22/22 | Update §7. |
 | R9 | Audit policy autogen | `autogen.podControllers.controllers: []` is accepted by the v1 schema; set it so that Kyverno generates no Deployment/StatefulSet rules from a Pod policy. | `tests/golden/audit.yaml`; H3 | Add to §7. |
 | R10 | `kyverno test` rejects non-policy documents in a policy file | `policy type not supported` for `ClusterRole`. The runner renders each policy alone with `helm template --show-only`. | `tests/kyverno/run.sh` | Add to `security-and-testing.md` §6.1. |
-| R11 | In-cluster results (kind 1.37.0, Kyverno 3.10.0 / v1.20.0) | **All Phase 1 scenarios pass:** E1 (preflight P1–P8 all PASS), E2, E3, E5, E6, E7, E8, E10, E12, E13 (0 dropped runs, 0 policy errors), E15, E16 a–d. The audit `ValidatingPolicy` background scan writes a `PolicyReport` fail result for a would-delete Pod (so `time.now()` and `namespaceObject` work in background scans; the §7 fallback to `hack/preview.sh` is not needed). `helm upgrade --reuse-values` re-creates a ClusterRole deleted out of band. | `tests/e2e/run.sh` and `tests/chainsaw/ephemeral-pods/*` | Update §7 and `security-and-testing.md` §6.3 (results). |
+| R11 | In-cluster results (kind 1.37.0, Kyverno 3.10.0 / v1.20.0) | **All Phase 1 scenarios pass:** E1 (preflight P1–P8 all PASS), E2, E3, E5, E6, E7, E8, E10, E12, E13 (0 dropped runs, 0 policy errors), E15, E16 a–d. The audit `ValidatingPolicy` background scan writes a `PolicyReport` fail result for a would-delete Pod (so `time.now()` and `namespaceObject` work in background scans; the §7 fallback to `hack/preview.sh` is not needed). `helm upgrade --reuse-values` re-creates a ClusterRole deleted out of band. | `tests/e2e/run.sh` and `tests/chainsaw/packs/*` | Update §7 and `security-and-testing.md` §6.3 (results). |
 | R16 | TTL arming and `resourceFilters` (`security-and-testing.md` §3.3, was **[inferred]**) | **Confirmed in-cluster.** `kyverno_ttl_controller_info{resource_resource="pods"}` appears only after delete mode grants Pods. Then Pods labeled `cleanup.kyverno.io/ttl` that existed before the guard were deleted in **both `default` and `kube-public`**, although `kube-public` is in Kyverno's default `resourceFilters`. P8 caught both before the switch. | e2e driver observation and E16d | Change the tag to **[local]**; strengthen the P8 rationale. |
 | R17 | Chainsaw script timeout | The default `exec` timeout is 5 s; a script with four `kubectl` calls was killed (`signal: killed`). Tests that run scripts set `timeouts.exec: 3m`. | first e2e run, `rbac-scope` | Add to `security-and-testing.md` §6.3. |
 | R12 | `helm lint` and the render gate | `helm lint` does not execute template `fail` calls, so lint passes even when the gate conditions are violated. H7 and H8 (`helm template`) are the real gate tests. | local Helm 3.20.1 | Add to `compatibility.md` §4.3. |
 | R13 | Chainsaw version (`compatibility.md` §5, was **[unverified]**) | Pinned to v0.2.15 (latest release, 2026-05-06), checksum-verified. | `tests/versions.env`, `hack/install-tools.sh` | Replace the tag. |
-| R14 | E15 scope in Phase 1 | `temporaryConfigMaps` is not implemented yet, so E15 runs with only `ephemeralPods` in delete mode and checks that ConfigMaps, Namespaces, and Jobs are denied. | `tests/chainsaw/ephemeral-pods/40-rbac-scope` | Note in `security-and-testing.md` E15. |
+| R14 | E15 scope in Phase 1 | `temporaryConfigMaps` is not implemented yet, so E15 runs with only `ephemeralPods` in delete mode and checks that ConfigMaps, Namespaces, and Jobs are denied. | `tests/chainsaw/packs/40-rbac-scope` | Note in `security-and-testing.md` E15. |
 | R15 | Enabling an unimplemented pack | The render gate fails with `packs.<key> is not implemented` instead of silently rendering nothing. | H6 | Note in `kyverno-policy-pack.md` §8. |
+
+### 6.3 Phase 2 (remaining v0.1 packs)
+
+| # | Item | Result | Evidence | Spec change |
+|---|------|--------|----------|-------------|
+| R18 | Golden files under Helm 4 | Helm 4.3.2 folds long strings differently from Helm 3; a byte-level golden check fails while the content is the same. H10 compares parsed documents (fixed in PR #4). | PR #4 CI, job "Chart render (Helm v4.3.2)" | Add to `security-and-testing.md` H10. |
+| R19 | A1 for a pack whose `objectSelector` has only a `NotIn` expression (Jobs) | Kyverno CLI v1.20.0 reports the protected Job as `skip` for the `DeletingPolicy` and `pass` for the audit `ValidatingPolicy`. Both verdicts are "kept" (the CEL `not-protected` condition enforces it). A1 is defined on verdicts. | `tests/kyverno/completed-jobs-retention-audit` (comment in the test file) | Define A1 on verdicts in `security-and-testing.md` §6.1. |
+| R20 | `previewEnvironments` and `namespaceObject` (§6.3 item 6) | The Namespace variant never references `namespaceObject`. Its CEL compiles and gives the expected verdicts for 13 cases. | `tests/kyverno/preview-environments{,-audit}` | Close item 6 as "not used". |
+| R21 | Jobs pack CEL | `object.?status.?conditions.orValue([]).filter(...)` and `timestamp(lastTransitionTime) + duration(retention)` compile; `Suspended`, running, recent, native-TTL, and CronJob-owned Jobs are kept. | `tests/kyverno/completed-jobs-retention` 12/12 | Document the condition list in §4.2. |
+| R22 | `janitor.io/job-retention` guard | The label lives on Namespaces, so the guard also matches `namespaces` when the Jobs pack is enabled, and the rule checks permission to delete Jobs in that namespace (not the Namespace itself). | H12; `templates/guard/validatingadmissionpolicy.yaml` (`canDeleteJobsHere`) | Update G-OPT in `security-and-testing.md` §4.1. |
+| R23 | Namespace delete check | For `namespaces`, the guard uses a cluster-scoped authorizer check (no namespace attribute). | same template (`canDelete`) | Note in §4.2. |
+| R24 | `default` namespace and debug Pods (side-agent finding) | `default` is in the built-in protected list (invariant S3), so G-NS rejects `janitor.io/ephemeral` there; `kubectl run debug ...` in `default` fails loudly. Kept as specified. The G-NS message now lists the protected namespaces and the fix, and `NOTES.txt` shows `-n <namespace>`. | `templates/guard/validatingadmissionpolicy.yaml`, `templates/NOTES.txt` | **Fix the §4.2 usage example** to pass `-n <namespace>`. **Open question for the owner:** keep `default` protected? |
+| R25 | Unimplemented chart features | `preflight.helmTest.enabled=true` fails the render (not silently ignored). | H6 | Note in §8. |
 
 ## Appendix A: Audit probe
 

@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: e9-held
+  finalizers:
+    - example.com/hold
+(metadata.deletionTimestamp != null): true

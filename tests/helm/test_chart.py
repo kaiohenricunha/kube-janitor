@@ -74,28 +74,40 @@ def test_h2_no_delete_rbac_without_delete_mode():
             assert not delete_rules(role), f"{role['metadata']['name']} grants delete outside delete mode"
 
 
+PACKS = {"ephemeral-pods": ("", "pods"), "preview-environments": ("", "namespaces"),
+         "temporary-configmaps": ("", "configmaps"), "completed-jobs-retention": ("batch", "jobs")}
+
+
 def test_h3_audit_mode_renders_validating_policy_only():
     docs = render(values=[CHART / "ci" / "audit.yaml"])
-    assert len(kinds(docs, "ValidatingPolicy")) == 1
     assert kinds(docs, "DeletingPolicy") == []
-    vpol = kinds(docs, "ValidatingPolicy")[0]
-    assert vpol["spec"]["validationActions"] == ["Audit"]
-    assert vpol["spec"]["evaluation"]["background"]["enabled"] is True
-    assert vpol["spec"]["evaluation"]["admission"]["enabled"] is False
-    assert vpol["spec"]["autogen"]["podControllers"]["controllers"] == []
+    vpols = {v["metadata"]["name"]: v for v in kinds(docs, "ValidatingPolicy")}
+    assert set(vpols) == {f"kube-janitor-{slug}-audit" for slug in PACKS}, sorted(vpols)
+    for vpol in vpols.values():
+        assert vpol["spec"]["validationActions"] == ["Audit"]
+        assert vpol["spec"]["evaluation"]["background"]["enabled"] is True
+        assert vpol["spec"]["evaluation"]["admission"]["enabled"] is False
+        assert vpol["spec"]["autogen"]["podControllers"]["controllers"] == []
 
 
 def test_h4_delete_mode_renders_exact_aggregated_role():
     docs = render(values=[CHART / "ci" / "delete.yaml"])
-    assert len(kinds(docs, "DeletingPolicy")) == 1
+    assert {d["metadata"]["name"] for d in kinds(docs, "DeletingPolicy")} == {f"kube-janitor-{s}" for s in PACKS}
     assert kinds(docs, "ValidatingPolicy") == []
-    roles = [r for r in kinds(docs, "ClusterRole") if r["metadata"].get("labels", {}).get(AGG_LABEL) == "true"]
-    assert len(roles) == 1, "exactly one aggregated ClusterRole per delete-mode pack"
-    rules = roles[0]["rules"]
-    assert rules == [{"apiGroups": [""], "resources": ["pods"], "verbs": ["get", "list", "watch", "delete"]}], rules
+    roles = {r["metadata"]["name"]: r for r in kinds(docs, "ClusterRole")
+             if r["metadata"].get("labels", {}).get(AGG_LABEL) == "true"}
+    assert set(roles) == {f"kube-janitor-policies:cleanup:{s}" for s in PACKS}, sorted(roles)
+    for slug, (group, resource) in PACKS.items():
+        rules = roles[f"kube-janitor-policies:cleanup:{slug}"]["rules"]
+        assert rules == [{"apiGroups": [group], "resources": [resource], "verbs": ["get", "list", "watch", "delete"]}], rules
     for role in kinds(docs, "ClusterRole"):
-        if role is not roles[0]:
+        if role["metadata"]["name"] not in roles:
             assert not delete_rules(role), f"unexpected delete rule in {role['metadata']['name']}"
+    # Only the pack that is in delete mode gets a role.
+    one = render(sets=["packs.temporaryConfigMaps.enabled=true", "packs.temporaryConfigMaps.mode=delete",
+                       "packs.ephemeralPods.enabled=true"])
+    agg = [r["metadata"]["name"] for r in kinds(one, "ClusterRole") if r["metadata"].get("labels", {}).get(AGG_LABEL)]
+    assert agg == ["kube-janitor-policies:cleanup:temporary-configmaps"], agg
 
 
 def test_h5_no_two_policies_target_the_same_resource():
@@ -117,14 +129,15 @@ def test_h6_schema_rejects_bad_values():
                 "global.extraProtectedNamespaces={Bad_Name}", "unknownTopLevel=1"):
         render_fails(sets=[bad], expect=schema)
     render_fails(sets=["metadataGuard.validationActions={Deny,Warn}"], expect="both Deny and Warn")
-    render_fails(sets=["packs.previewEnvironments.enabled=true"], expect="not implemented")
+    render_fails(sets=["preflight.helmTest.enabled=true"], expect="not implemented")
+    render_fails(sets=["metadataGuard.mixedOwnership={Deny,Warn}"], expect="both Deny and Warn")
 
 
 def test_h7_delete_mode_requires_deny_guard():
     render_fails(values=[CHART / "ci" / "delete.yaml"],
                  sets=["metadataGuard.validationActions={Warn,Audit}"], expect="Deny")
     docs = render(values=[CHART / "ci" / "delete.yaml"])
-    binding = kinds(docs, "ValidatingAdmissionPolicyBinding")
+    binding = [b for b in kinds(docs, "ValidatingAdmissionPolicyBinding") if b["metadata"]["name"] == "kube-janitor-metadata-guard"]
     assert len(binding) == 1 and "Deny" in binding[0]["spec"]["validationActions"]
 
 
@@ -139,6 +152,51 @@ def test_h9_kube_version_constraint():
     assert render(sets=None) == []
     r = helm_template("--kube-version", "1.34.0")
     assert r.returncode == 0, r.stderr
+
+
+def test_h12_guard_covers_every_enabled_kind():
+    docs = render(values=[CHART / "ci" / "delete.yaml"])
+    vap = [v for v in kinds(docs, "ValidatingAdmissionPolicy") if v["metadata"]["name"] == "kube-janitor-metadata-guard"][0]
+    covered = {(r["apiGroups"][0], r["resources"][0]) for r in vap["spec"]["matchConstraints"]["resourceRules"]}
+    assert covered == set(PACKS.values()), covered
+    only_jobs = render(sets=["packs.completedJobsRetention.enabled=true"])
+    vap = kinds(only_jobs, "ValidatingAdmissionPolicy")[0]
+    covered = {(r["apiGroups"][0], r["resources"][0]) for r in vap["spec"]["matchConstraints"]["resourceRules"]}
+    assert covered == {("batch", "jobs"), ("", "namespaces")}, "job-retention lives on Namespaces"
+
+
+def test_h13_mixed_ownership_only_with_preview_pack():
+    names = lambda d: {x["metadata"]["name"] for x in kinds(d, "ValidatingAdmissionPolicy")}
+    assert "kube-janitor-mixed-ownership" not in names(render(sets=["packs.ephemeralPods.enabled=true"]))
+    docs = render(sets=["packs.previewEnvironments.enabled=true"])
+    assert "kube-janitor-mixed-ownership" in names(docs)
+    b = [x for x in kinds(docs, "ValidatingAdmissionPolicyBinding") if x["metadata"]["name"] == "kube-janitor-mixed-ownership"][0]
+    assert b["spec"]["validationActions"] == ["Warn", "Audit"]
+
+
+def test_h14_prometheus_rule_only_when_enabled_and_deleting():
+    assert kinds(render(values=[CHART / "ci" / "delete.yaml"]), "PrometheusRule") == []
+    assert kinds(render(values=[CHART / "ci" / "audit.yaml"], sets=["monitoring.prometheusRule.enabled=true"]), "PrometheusRule") == []
+    rule = kinds(render(values=[CHART / "ci" / "delete.yaml"], sets=["monitoring.prometheusRule.enabled=true"]), "PrometheusRule")
+    assert len(rule) == 1
+    alerts = {r["alert"] for g in rule[0]["spec"]["groups"] for r in g["rules"]}
+    assert alerts == {"KubeJanitorDeletingPolicyErrors", "KubeJanitorDeletingScheduleDropped"}
+
+
+def test_h15_protected_namespaces_cannot_be_removed():
+    docs = render(values=[CHART / "ci" / "delete.yaml"], sets=["global.extraProtectedNamespaces={prod}", "global.kyvernoNamespace=kyv"])
+    for pol in kinds(docs, "DeletingPolicy"):
+        mc = pol["spec"]["matchConstraints"]
+        sel = mc.get("namespaceSelector") or mc["objectSelector"]
+        values = [e for e in sel["matchExpressions"] if e["key"] == "kubernetes.io/metadata.name"][0]["values"]
+        assert values == ["kube-system", "kube-public", "kube-node-lease", "default", "kyv", "prod"], values
+
+
+def test_h16_examples_parse():
+    files = sorted((ROOT / "examples").rglob("*.y*ml"))
+    assert files, "examples/ is empty"
+    for f in files:
+        list(yaml.safe_load_all(f.read_text()))
 
 
 def golden_pairs():

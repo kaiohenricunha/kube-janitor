@@ -1,0 +1,4 @@
+{{- $pack := .Values.packs.completedJobsRetention -}}
+{{- if and $pack.enabled (eq $pack.mode "delete") }}
+{{ include "kjp.deletingPolicy" (dict "root" $ "key" "completedJobsRetention") }}
+{{- end }}

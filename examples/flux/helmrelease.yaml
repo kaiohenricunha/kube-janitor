@@ -1,0 +1,34 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: kube-janitor-policies
+  namespace: flux-system
+spec:
+  interval: 1h
+  url: oci://ghcr.io/kaiohenricunha/charts/kube-janitor-policies
+  ref:
+    tag: 0.1.0                               # pin an exact version
+  layerSelector:
+    mediaType: application/vnd.cncf.helm.chart.content.v1.tar+gzip
+    operation: copy
+  verify:
+    provider: cosign
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: kube-janitor-policies
+  namespace: flux-system
+spec:
+  interval: 30m
+  targetNamespace: kube-janitor
+  install:
+    createNamespace: true
+  chartRef:
+    kind: OCIRepository
+    name: kube-janitor-policies
+  values:
+    packs:
+      ephemeralPods:
+        enabled: true
+        mode: audit

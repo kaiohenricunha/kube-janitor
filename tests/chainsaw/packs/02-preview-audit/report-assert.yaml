@@ -1,0 +1,6 @@
+apiVersion: wgpolicyk8s.io/v1alpha2
+kind: ClusterPolicyReport
+scope:
+  kind: Namespace
+  name: e4-preview-expired
+(results[?policy == 'kube-janitor-preview-environments-audit'] | [0].result): fail

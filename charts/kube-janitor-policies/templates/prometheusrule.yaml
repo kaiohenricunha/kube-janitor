@@ -1,0 +1,30 @@
+{{- if and .Values.monitoring.prometheusRule.enabled (eq (include "kjp.anyDelete" .) "true") }}
+# Alerts from docs/specs/kyverno-policy-pack.md section 9.1. Needs the Prometheus Operator CRD.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: kube-janitor-policies
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kjp.labels" . | nindent 4 }}
+spec:
+  groups:
+    - name: kube-janitor-policies
+      rules:
+        - alert: KubeJanitorDeletingPolicyErrors
+          expr: sum by (policy_name) (increase(kyverno_deleting_controller_errors_total{policy_name=~"kube-janitor-.*"}[15m])) > 0
+          for: 0m
+          labels:
+            severity: warning
+          annotations:
+            summary: "kube-janitor policy {{ "{{ $labels.policy_name }}" }} failed to list or delete resources"
+            description: "A Forbidden LIST is skipped silently (run still looks successful). Run hack/preflight.sh (check P4) and read the cleanup controller logs."
+        - alert: KubeJanitorDeletingScheduleDropped
+          expr: increase(kyverno_controller_drop_total{controller_name="deleting-controller"}[30m]) > 0
+          for: 0m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Kyverno dropped a DeletingPolicy after repeated failures"
+            description: "After 10 failed retries the schedule stops until the policy changes or the controller restarts (Kyverno #18248). Fix the cause, then restart the cleanup controller."
+{{- end }}

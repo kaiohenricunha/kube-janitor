@@ -1,0 +1,39 @@
+# Rendered policies are placed next to this file by tests/kyverno/run.sh
+# (helm template --show-only, see suite.env). Do not commit policy.yaml.
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: preview-environments-delete
+policies:
+- policy.yaml
+resources:
+- resources.yaml
+results:
+- isDeletingPolicy: true
+  kind: Namespace
+  policy: kube-janitor-preview-environments
+  resources:
+  - n02-expired
+  - n15-default-ttl-old
+  result: pass
+- isDeletingPolicy: true
+  kind: Namespace
+  policy: kube-janitor-preview-environments
+  resources:
+  - n07-argocd
+  - n08-flux
+  - n10-helm
+  - n11-future
+  - n12-garbage
+  - n14-terminating
+  - n16-default-ttl-new
+  result: fail
+- isDeletingPolicy: true
+  kind: Namespace
+  policy: kube-janitor-preview-environments
+  resources:
+  - n01-no-optin
+  - kube-system
+  - default
+  - n05-protected
+  result: skip

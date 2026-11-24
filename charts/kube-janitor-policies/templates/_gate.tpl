@@ -16,6 +16,12 @@ There is deliberately no values flag that skips this gate.
 {{- if and (has "Deny" .Values.metadataGuard.validationActions) (has "Warn" .Values.metadataGuard.validationActions) -}}
 {{- fail "metadataGuard.validationActions cannot contain both Deny and Warn (Kubernetes rejects that binding)" -}}
 {{- end -}}
+{{- if and (has "Deny" .Values.metadataGuard.mixedOwnership) (has "Warn" .Values.metadataGuard.mixedOwnership) -}}
+{{- fail "metadataGuard.mixedOwnership cannot contain both Deny and Warn (Kubernetes rejects that binding)" -}}
+{{- end -}}
+{{- if .Values.preflight.helmTest.enabled -}}
+{{- fail (printf "preflight.helmTest is not implemented in chart version %s; run hack/preflight.sh instead" .Chart.Version) -}}
+{{- end -}}
 {{- $defs := include "kjp.packDefs" . | fromYaml -}}
 {{- range $key, $pack := .Values.packs -}}
 {{- if and $pack.enabled (not (index $defs $key).implemented) -}}

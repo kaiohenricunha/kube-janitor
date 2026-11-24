@@ -1,8 +1,9 @@
 kube-janitor-policies {{ .Chart.Version }} is installed in namespace {{ .Release.Namespace }}.
-{{ $any := false }}
+{{- $any := false }}
 {{- range $key, $pack := .Values.packs }}
-{{- if $pack.enabled }}{{ $any = true }}
-  - {{ $key }}: mode={{ $pack.mode }}{{ if eq $pack.mode "audit" }} (reports only; read: kubectl get policyreports -A){{ else }} (DELETES expired opted-in objects){{ end }}
+{{- if $pack.enabled }}
+{{- $any = true }}
+  - {{ $key }}: mode={{ $pack.mode }}{{ if eq $pack.mode "audit" }} (reports only; read: kubectl get policyreports,clusterpolicyreports -A){{ else }} (DELETES expired opted-in objects){{ end }}
 {{- end }}
 {{- end }}
 {{- if not $any }}
@@ -10,6 +11,11 @@ All packs are disabled. Nothing is reported or deleted.
 Enable a pack in audit mode first, for example:
   --set packs.ephemeralPods.enabled=true
 {{- end }}
+
+Opt an object in from a namespace that is NOT protected
+({{ include "kjp.protectedNamespaces" . | fromJsonArray | join ", " }}), for example:
+  kubectl run debug-$USER -n <namespace> --image=busybox -l janitor.io/ephemeral=true -- sleep infinity
+The metadata guard rejects cleanup labels in protected namespaces (rule G-NS).
 
 Before you switch a pack to mode=delete, run hack/preflight.sh (checks P1-P8).
 Design and safety model: https://github.com/kaiohenricunha/kube-janitor/blob/main/docs/specs/kyverno-policy-pack.md

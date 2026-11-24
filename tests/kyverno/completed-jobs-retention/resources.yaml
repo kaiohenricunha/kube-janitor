@@ -1,0 +1,233 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: j18-complete-old
+  namespace: jobs-a
+  creationTimestamp: '2000-01-01T00:00:00Z'
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: c
+        image: busybox
+status:
+  conditions:
+  - type: Complete
+    status: 'True'
+    lastTransitionTime: '2000-01-01T00:00:00Z'
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: j18b-failed-old
+  namespace: jobs-a
+  creationTimestamp: '2000-01-01T00:00:00Z'
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: c
+        image: busybox
+status:
+  conditions:
+  - type: Failed
+    status: 'True'
+    lastTransitionTime: '2000-01-01T00:00:00Z'
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: j19-native-ttl
+  namespace: jobs-a
+  creationTimestamp: '2000-01-01T00:00:00Z'
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: c
+        image: busybox
+  ttlSecondsAfterFinished: 3600
+status:
+  conditions:
+  - type: Complete
+    status: 'True'
+    lastTransitionTime: '2000-01-01T00:00:00Z'
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: j20-cronjob-owned
+  namespace: jobs-a
+  creationTimestamp: '2000-01-01T00:00:00Z'
+  ownerReferences:
+  - apiVersion: batch/v1
+    kind: CronJob
+    name: cj
+    uid: u
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: c
+        image: busybox
+status:
+  conditions:
+  - type: Complete
+    status: 'True'
+    lastTransitionTime: '2000-01-01T00:00:00Z'
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: j21-running
+  namespace: jobs-a
+  creationTimestamp: '2000-01-01T00:00:00Z'
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: c
+        image: busybox
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: j21b-complete-recent
+  namespace: jobs-a
+  creationTimestamp: '2000-01-01T00:00:00Z'
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: c
+        image: busybox
+status:
+  conditions:
+  - type: Complete
+    status: 'True'
+    lastTransitionTime: '2999-01-01T00:00:00Z'
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: j21c-suspended
+  namespace: jobs-a
+  creationTimestamp: '2000-01-01T00:00:00Z'
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: c
+        image: busybox
+status:
+  conditions:
+  - type: Suspended
+    status: 'True'
+    lastTransitionTime: '2000-01-01T00:00:00Z'
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: j22-no-retention-ns
+  namespace: jobs-b
+  creationTimestamp: '2000-01-01T00:00:00Z'
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: c
+        image: busybox
+status:
+  conditions:
+  - type: Complete
+    status: 'True'
+    lastTransitionTime: '2000-01-01T00:00:00Z'
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: j-protected
+  namespace: jobs-a
+  creationTimestamp: '2000-01-01T00:00:00Z'
+  labels:
+    janitor.io/protected: 'true'
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: c
+        image: busybox
+status:
+  conditions:
+  - type: Complete
+    status: 'True'
+    lastTransitionTime: '2000-01-01T00:00:00Z'
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: j-argocd
+  namespace: jobs-a
+  creationTimestamp: '2000-01-01T00:00:00Z'
+  annotations:
+    argocd.argoproj.io/tracking-id: a:batch/Job:jobs-a/j-argocd
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: c
+        image: busybox
+status:
+  conditions:
+  - type: Complete
+    status: 'True'
+    lastTransitionTime: '2000-01-01T00:00:00Z'
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: j-kube-system
+  namespace: kube-system
+  creationTimestamp: '2000-01-01T00:00:00Z'
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: c
+        image: busybox
+status:
+  conditions:
+  - type: Complete
+    status: 'True'
+    lastTransitionTime: '2000-01-01T00:00:00Z'
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: j-terminating
+  namespace: jobs-a
+  creationTimestamp: '2000-01-01T00:00:00Z'
+  deletionTimestamp: '2000-01-01T00:00:00Z'
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: c
+        image: busybox
+status:
+  conditions:
+  - type: Complete
+    status: 'True'
+    lastTransitionTime: '2000-01-01T00:00:00Z'

@@ -1,0 +1,39 @@
+# Rendered policies are placed next to this file by tests/kyverno/run.sh
+# (helm template --show-only, see suite.env). Do not commit policy.yaml.
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: completed-jobs-retention-delete
+policies:
+- policy.yaml
+resources:
+- resources.yaml
+variables: values.yaml
+results:
+- isDeletingPolicy: true
+  kind: Job
+  policy: kube-janitor-completed-jobs-retention
+  resources:
+  - jobs-a/j18-complete-old
+  - jobs-a/j18b-failed-old
+  result: pass
+- isDeletingPolicy: true
+  kind: Job
+  policy: kube-janitor-completed-jobs-retention
+  resources:
+  - jobs-a/j19-native-ttl
+  - jobs-a/j20-cronjob-owned
+  - jobs-a/j21-running
+  - jobs-a/j21b-complete-recent
+  - jobs-a/j21c-suspended
+  - jobs-a/j-argocd
+  - jobs-a/j-terminating
+  result: fail
+- isDeletingPolicy: true
+  kind: Job
+  policy: kube-janitor-completed-jobs-retention
+  resources:
+  - jobs-b/j22-no-retention-ns
+  - jobs-a/j-protected
+  - kube-system/j-kube-system
+  result: skip

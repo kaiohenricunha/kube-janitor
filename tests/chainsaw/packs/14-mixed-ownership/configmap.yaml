@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gmix
+  annotations:
+    argocd.argoproj.io/tracking-id: demo:/ConfigMap:x/gmix
+data:
+  k: v

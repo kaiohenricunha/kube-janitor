@@ -1,0 +1,34 @@
+# E14: in a namespace labeled janitor.io/job-retention=enabled, a finished standalone Job is
+# deleted after the retention (1m in ci/e2e.yaml); a Job with ttlSecondsAfterFinished and the
+# CronJob-owned Jobs are kept.
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: jobs
+spec:
+  timeouts:
+    error: 6m
+    assert: 1m
+    exec: 1m
+  steps:
+    - name: opt-in-namespace-and-create
+      try:
+        - script:
+            content: kubectl label namespace $NAMESPACE janitor.io/job-retention=enabled
+            check:
+              ($error): ~
+        - apply:
+            file: jobs.yaml
+    - name: standalone-finished-job-deleted
+      try:
+        - error:
+            file: standalone-ref.yaml
+    - name: native-ttl-and-cronjob-jobs-kept
+      try:
+        - assert:
+            file: native-ref.yaml
+        - script:
+            content: kubectl -n $NAMESPACE get jobs -o json | jq '[.items[] | select(.metadata.ownerReferences[0].kind == "CronJob")] | length'
+            check:
+              ($error): ~
+              (to_number(trim($stdout)) >= `1`): true

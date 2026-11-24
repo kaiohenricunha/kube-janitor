@@ -1,0 +1,41 @@
+# Rendered policies are placed next to this file by tests/kyverno/run.sh
+# (helm template --show-only, see suite.env). Do not commit policy.yaml.
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: temporary-configmaps-audit
+policies:
+- policy.yaml
+resources:
+- ../temporary-configmaps/resources.yaml
+variables: ../temporary-configmaps/values.yaml
+results:
+- isValidatingPolicy: true
+  kind: ConfigMap
+  policy: kube-janitor-temporary-configmaps-audit
+  resources:
+  - team-a/c02-expired
+  - team-a/c15-default-ttl-old
+  result: fail
+- isValidatingPolicy: true
+  kind: ConfigMap
+  policy: kube-janitor-temporary-configmaps-audit
+  resources:
+  - team-a/c07-argocd
+  - team-a/c08-flux
+  - team-a/c10-helm
+  - team-a/c11-future
+  - team-a/c12-feb30
+  - team-a/c13-owned
+  - team-a/c14-terminating
+  - team-a/c16-default-ttl-new
+  result: pass
+- isValidatingPolicy: true
+  kind: ConfigMap
+  policy: kube-janitor-temporary-configmaps-audit
+  resources:
+  - team-a/c01-no-optin
+  - default/c03-default-ns
+  - team-a/c05-protected-label
+  - prot-ns/c06-protected-ns
+  result: skip
