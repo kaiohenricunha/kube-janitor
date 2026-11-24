@@ -1,0 +1,25 @@
+# E4 (a): in audit mode an opted-in expired Namespace is kept and reported (ClusterPolicyReport
+# fail). The Namespaces stay after this test (skipDelete) for E4 (b) and (c) in 11-preview-delete.
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: preview-audit
+spec:
+  skipDelete: true
+  timeouts:
+    assert: 4m
+  steps:
+    - name: create-namespaces
+      try:
+        - apply:
+            file: namespaces.yaml
+    - name: report-says-would-delete
+      try:
+        - assert:
+            file: report-assert.yaml
+    - name: kept-in-audit-mode
+      try:
+        - sleep:
+            duration: 1m10s
+        - assert:
+            file: namespaces-present.yaml

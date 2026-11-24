@@ -1,0 +1,27 @@
+# Pattern A for GitLab CI. The job identity must be allowed to delete the namespace.
+variables:
+  NS: mr-$CI_MERGE_REQUEST_IID
+
+preview:
+  stage: deploy
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  script:
+    - kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f -
+    - kubectl label namespace "$NS" --overwrite janitor.io/ephemeral=true "janitor.io/owner=gitlab-$CI_PROJECT_ID"
+    - kubectl annotate namespace "$NS" --overwrite janitor.io/expires-at="$(date -u -d '+72 hours' +%Y-%m-%dT%H:%M:%SZ)"
+    - helm upgrade --install app ./chart -n "$NS"
+  environment:
+    name: review/$CI_MERGE_REQUEST_IID
+    on_stop: stop-preview
+
+stop-preview:
+  stage: deploy
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
+  script:
+    - kubectl annotate namespace "$NS" --overwrite janitor.io/expires-at="$(date -u -d '+1 hour' +%Y-%m-%dT%H:%M:%SZ)"
+  environment:
+    name: review/$CI_MERGE_REQUEST_IID
+    action: stop

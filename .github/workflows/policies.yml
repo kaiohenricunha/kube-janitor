@@ -68,9 +68,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        k8s: ["1.37"]
+        k8s: ["1.34", "1.35", "1.36", "1.37"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0   # E11 renders the previous chart from origin/main
       - uses: azure/setup-helm@2f5e7bc67f1f9972ab16657bb795f36d8f04de0e # v5.1.0
         with:
           version: v3.22.1

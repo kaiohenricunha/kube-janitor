@@ -1,0 +1,43 @@
+# Rendered policies are placed next to this file by tests/kyverno/run.sh
+# (helm template --show-only, see suite.env). Do not commit policy.yaml.
+# A1 is defined on verdicts: audit FAIL exactly where the DeletingPolicy PASSES (would delete).
+# Observed with Kyverno CLI v1.20.0: for this pack, whose objectSelector has only a NotIn
+# expression, the ValidatingPolicy matches the protected Job and reports PASS (kept) where the
+# DeletingPolicy reports SKIP. The verdict is the same; the CEL not-protected condition keeps it.
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: completed-jobs-retention-audit
+policies:
+- policy.yaml
+resources:
+- ../completed-jobs-retention/resources.yaml
+variables: ../completed-jobs-retention/values.yaml
+results:
+- isValidatingPolicy: true
+  kind: Job
+  policy: kube-janitor-completed-jobs-retention-audit
+  resources:
+  - jobs-a/j18-complete-old
+  - jobs-a/j18b-failed-old
+  result: fail
+- isValidatingPolicy: true
+  kind: Job
+  policy: kube-janitor-completed-jobs-retention-audit
+  resources:
+  - jobs-a/j19-native-ttl
+  - jobs-a/j20-cronjob-owned
+  - jobs-a/j21-running
+  - jobs-a/j21b-complete-recent
+  - jobs-a/j21c-suspended
+  - jobs-a/j-argocd
+  - jobs-a/j-terminating
+  - jobs-a/j-protected
+  result: pass
+- isValidatingPolicy: true
+  kind: Job
+  policy: kube-janitor-completed-jobs-retention-audit
+  resources:
+  - jobs-b/j22-no-retention-ns
+  - kube-system/j-kube-system
+  result: skip

@@ -23,14 +23,22 @@ spec:
   failurePolicy: Fail
   matchConstraints:
     resourceRules:
+      {{- $guarded := dict }}
       {{- range $key, $pack := .Values.packs }}
       {{- if $pack.enabled }}
       {{- $def := index $defs $key }}
-      - apiGroups: [{{ $def.apiGroup | quote }}]
-        apiVersions: [{{ $def.apiVersion | quote }}]
-        resources: [{{ $def.resource | quote }}]
-        operations: ["CREATE", "UPDATE"]
+      {{- $_ := set $guarded (printf "%s/%s/%s" $def.apiGroup $def.apiVersion $def.resource) true }}
+      {{- if eq $def.selection "namespace" }}
+      {{- $_ := set $guarded "/v1/namespaces" true }}
       {{- end }}
+      {{- end }}
+      {{- end }}
+      {{- range $gvr, $_ := $guarded }}
+      {{- $parts := splitList "/" $gvr }}
+      - apiGroups: [{{ index $parts 0 | quote }}]
+        apiVersions: [{{ index $parts 1 | quote }}]
+        resources: [{{ index $parts 2 | quote }}]
+        operations: ["CREATE", "UPDATE"]
       {{- end }}
   matchConditions:
     - name: touches-cleanup-metadata
@@ -57,7 +65,9 @@ spec:
     - name: oldProtected
       expression: {{ printf "oldObject == null ? '' : %s[?'janitor.io/protected'].orValue('')" $oldLbl | quote }}
     - name: lifecycleChanged
-      expression: "(variables.newOptIn != '' && variables.newOptIn != variables.oldOptIn) || (variables.newRetention != '' && variables.newRetention != variables.oldRetention) || (variables.newTTL != '' && variables.newTTL != variables.oldTTL) || (variables.newExpiry != '' && variables.newExpiry != variables.oldExpiry) || (variables.newExpiry == '' && variables.oldExpiry != '' && variables.newOptIn != '')"
+      expression: "(variables.newOptIn != '' && variables.newOptIn != variables.oldOptIn) || (variables.newTTL != '' && variables.newTTL != variables.oldTTL) || (variables.newExpiry != '' && variables.newExpiry != variables.oldExpiry) || (variables.newExpiry == '' && variables.oldExpiry != '' && variables.newOptIn != '')"
+    - name: retentionChanged
+      expression: "variables.newRetention != '' && variables.newRetention != variables.oldRetention"
     - name: protectionRemoved
       expression: "variables.oldProtected == 'true' && variables.newProtected != 'true'"
     - name: targetNamespace
@@ -65,15 +75,20 @@ spec:
     - name: inProtectedNamespace
       expression: {{ printf "variables.targetNamespace in %s" $protected | quote }}
     - name: canDelete
-      expression: "authorizer.group(request.resource.group).resource(request.resource.resource).namespace(request.namespace).name(object.metadata.name).check('delete').allowed()"
+      expression: "request.resource.resource == 'namespaces' ? authorizer.group('').resource('namespaces').namespace(object.metadata.name).name(object.metadata.name).check('delete').allowed() : authorizer.group(request.resource.group).resource(request.resource.resource).namespace(request.namespace).name(object.metadata.name).check('delete').allowed()"
+    - name: canDeleteJobsHere
+      expression: "authorizer.group('batch').resource('jobs').namespace(variables.targetNamespace).check('delete').allowed()"
     - name: expiryValid
       expression: {{ include "kjp.validDateCEL" "variables.newExpiry" | quote }}
   validations:
-    - expression: "!(variables.lifecycleChanged && variables.inProtectedNamespace)"
-      messageExpression: "'kube-janitor guard G-NS: cleanup metadata is not allowed in protected namespace ' + variables.targetNamespace"
+    - expression: "!((variables.lifecycleChanged || variables.retentionChanged) && variables.inProtectedNamespace)"
+      messageExpression: {{ printf "'kube-janitor guard G-NS: cleanup metadata is not allowed in protected namespace ' + variables.targetNamespace + ' (protected: %s). Create the object in another namespace, for example: kubectl run ... -n <namespace>.'" (include "kjp.protectedNamespaces" . | fromJsonArray | join ", ") | quote }}
       reason: Forbidden
     - expression: "!variables.lifecycleChanged || variables.canDelete"
       messageExpression: "'kube-janitor guard G-OPT: only a principal allowed to delete ' + request.resource.resource + '/' + object.metadata.name + ' may set or change its cleanup metadata (janitor.io/ephemeral, janitor.io/expires-at, janitor.io/job-retention, cleanup.kyverno.io/ttl)'"
+      reason: Forbidden
+    - expression: "!variables.retentionChanged || variables.canDeleteJobsHere"
+      messageExpression: "'kube-janitor guard G-OPT: only a principal allowed to delete Jobs in namespace ' + variables.targetNamespace + ' may set or change janitor.io/job-retention'"
       reason: Forbidden
     - expression: "!variables.protectionRemoved || variables.canDelete"
       messageExpression: "'kube-janitor guard G-PROT: only a principal allowed to delete ' + request.resource.resource + '/' + object.metadata.name + ' may remove janitor.io/protected=true'"

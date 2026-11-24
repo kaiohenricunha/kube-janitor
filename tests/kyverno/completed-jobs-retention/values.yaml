@@ -1,0 +1,25 @@
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Value
+metadata:
+  name: values
+namespaces:
+- apiVersion: v1
+  kind: Namespace
+  metadata:
+    name: jobs-a
+    labels:
+      kubernetes.io/metadata.name: jobs-a
+      janitor.io/job-retention: enabled
+- apiVersion: v1
+  kind: Namespace
+  metadata:
+    name: jobs-b
+    labels:
+      kubernetes.io/metadata.name: jobs-b
+- apiVersion: v1
+  kind: Namespace
+  metadata:
+    name: kube-system
+    labels:
+      kubernetes.io/metadata.name: kube-system
+      janitor.io/job-retention: enabled

@@ -1,4 +1,6 @@
+# Every implemented pack enabled in delete mode.
 packs:
-  ephemeralPods:
-    enabled: true
-    mode: delete
+  ephemeralPods: {enabled: true, mode: delete, defaultTTL: 24h}
+  previewEnvironments: {enabled: true, mode: delete, defaultTTL: 72h}
+  temporaryConfigMaps: {enabled: true, mode: delete, defaultTTL: 168h}
+  completedJobsRetention: {enabled: true, mode: delete, retention: 168h}

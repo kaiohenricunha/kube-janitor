@@ -24,20 +24,20 @@ packs:
     defaultTTL: 24h
     # -- Cron schedule; empty uses global.schedule.
     schedule: ""
-  # Namespaces labeled janitor.io/ephemeral=true (implemented in a later release).
+  # Namespaces labeled janitor.io/ephemeral=true (preview environments).
   previewEnvironments:
     enabled: false
     mode: audit
     defaultTTL: 72h
     schedule: ""
-  # ConfigMaps labeled janitor.io/ephemeral=true (implemented in a later release).
+  # ConfigMaps labeled janitor.io/ephemeral=true.
   temporaryConfigMaps:
     enabled: false
     mode: audit
     defaultTTL: 168h
     schedule: ""
-  # Finished standalone Jobs in namespaces labeled janitor.io/job-retention=enabled
-  # (implemented in a later release).
+  # Finished standalone Jobs without ttlSecondsAfterFinished, in namespaces labeled
+  # janitor.io/job-retention=enabled. CronJob-owned Jobs are left to the CronJob history limits.
   completedJobsRetention:
     enabled: false
     mode: audit
@@ -48,15 +48,17 @@ metadataGuard:
   # -- ValidatingAdmissionPolicyBinding actions for guard rules G-OPT, G-FMT, G-PROT, G-NS.
   # Must contain Deny whenever any pack is in delete mode.
   validationActions: [Deny]
-  # -- Actions for rule G-MIX (GitOps object created in an opted-in namespace; later release).
+  # -- Actions for rule G-MIX (GitOps or Helm object created in an opted-in namespace).
+  # Rendered when previewEnvironments is enabled.
   mixedOwnership: [Warn, Audit]
 
 preflight:
   helmTest:
-    # -- Render the opt-in helm test Pod (later release).
+    # -- Not implemented yet; enabling it fails the render. Use hack/preflight.sh.
     enabled: false
 
 monitoring:
   prometheusRule:
-    # -- Render a PrometheusRule with deletion alerts (later release).
+    # -- Render a PrometheusRule with deletion alerts (needs the Prometheus Operator CRD).
+    # Rendered only while a pack is in delete mode.
     enabled: false

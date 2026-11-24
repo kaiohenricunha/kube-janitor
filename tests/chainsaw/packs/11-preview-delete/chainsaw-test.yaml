@@ -1,0 +1,25 @@
+# E4 (b) the opted-in expired Namespace is deleted in delete mode; (c) the Namespace without the
+# opt-in label is kept.
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: preview-delete
+spec:
+  timeouts:
+    error: 5m
+    assert: 1m
+    exec: 3m
+  steps:
+    - name: expired-preview-namespace-deleted
+      try:
+        - error:
+            file: expired-ref.yaml
+    - name: namespace-without-opt-in-kept
+      try:
+        - sleep:
+            duration: 1m10s
+        - assert:
+            file: no-optin-ref.yaml
+      finally:
+        - script:
+            content: kubectl delete namespace e4-preview-no-optin --ignore-not-found --wait=false

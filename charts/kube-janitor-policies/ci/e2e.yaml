@@ -1,8 +1,11 @@
-# End-to-end tests: one-minute schedule, short default TTL.
+# End-to-end tests: every pack in delete mode, one-minute schedule, one-minute lifetimes.
 global:
   schedule: "*/1 * * * *"
 packs:
-  ephemeralPods:
-    enabled: true
-    mode: delete
-    defaultTTL: 1m
+  ephemeralPods: {enabled: true, mode: delete, defaultTTL: 1m}
+  previewEnvironments: {enabled: true, mode: delete, defaultTTL: 1m}
+  temporaryConfigMaps: {enabled: true, mode: delete, defaultTTL: 1m}
+  completedJobsRetention: {enabled: true, mode: delete, retention: 1m}
+monitoring:
+  prometheusRule:
+    enabled: false

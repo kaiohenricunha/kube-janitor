@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: e4-preview-expired
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: e4-preview-no-optin

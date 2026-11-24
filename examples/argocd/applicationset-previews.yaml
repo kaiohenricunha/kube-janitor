@@ -1,0 +1,42 @@
+# Pattern B (docs/specs/gitops-integration.md section 5.3): Argo CD owns the preview
+# environment, including its namespace. When the PR closes, the generator removes the
+# Application and Argo CD deletes everything. kube-janitor ignores these namespaces because they
+# carry an Argo CD tracking annotation.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: previews
+  namespace: argocd
+spec:
+  syncPolicy:
+    preserveResourcesOnDeletion: false       # keep the resources finalizer on Applications
+  generators:
+    - pullRequest:
+        github:
+          owner: example
+          repo: app
+        requeueAfterSeconds: 300
+  template:
+    metadata:
+      name: 'preview-{{number}}'
+    spec:
+      project: previews
+      source:
+        repoURL: https://github.com/example/app.git
+        targetRevision: '{{head_sha}}'
+        path: deploy
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: 'pr-{{number}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+        managedNamespaceMetadata:
+          annotations:
+            # Makes Argo CD own (and delete) the namespace. Format:
+            # <app>:<group>/<kind>:<namespace>/<name>. Verify the namespace segment against
+            # your Argo CD version (gitops-integration.md section 8, G1).
+            argocd.argoproj.io/tracking-id: 'preview-{{number}}:/Namespace:pr-{{number}}/pr-{{number}}'

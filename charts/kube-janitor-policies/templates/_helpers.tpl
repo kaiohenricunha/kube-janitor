@@ -21,15 +21,31 @@ ephemeralPods:
   apiVersion: v1
   resource: pods
   scope: Namespaced
+  selection: object
 previewEnvironments:
   slug: preview-environments
-  implemented: false
+  implemented: true
+  apiGroup: ""
+  apiVersion: v1
+  resource: namespaces
+  scope: Cluster
+  selection: object
 temporaryConfigMaps:
   slug: temporary-configmaps
-  implemented: false
+  implemented: true
+  apiGroup: ""
+  apiVersion: v1
+  resource: configmaps
+  scope: Namespaced
+  selection: object
 completedJobsRetention:
   slug: completed-jobs-retention
-  implemented: false
+  implemented: true
+  apiGroup: batch
+  apiVersion: v1
+  resource: jobs
+  scope: Namespaced
+  selection: namespace
 {{- end -}}
 
 {{/*

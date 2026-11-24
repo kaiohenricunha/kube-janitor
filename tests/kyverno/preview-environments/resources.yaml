@@ -1,0 +1,140 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: n01-no-optin
+  creationTimestamp: '2000-01-01T00:00:00Z'
+  labels:
+    kubernetes.io/metadata.name: n01-no-optin
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: n02-expired
+  creationTimestamp: '2000-01-01T00:00:00Z'
+  labels:
+    kubernetes.io/metadata.name: n02-expired
+    janitor.io/ephemeral: 'true'
+  annotations:
+    janitor.io/expires-at: '2000-01-01T00:00:00Z'
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kube-system
+  creationTimestamp: '2000-01-01T00:00:00Z'
+  labels:
+    kubernetes.io/metadata.name: kube-system
+    janitor.io/ephemeral: 'true'
+  annotations:
+    janitor.io/expires-at: '2000-01-01T00:00:00Z'
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: default
+  creationTimestamp: '2000-01-01T00:00:00Z'
+  labels:
+    kubernetes.io/metadata.name: default
+    janitor.io/ephemeral: 'true'
+  annotations:
+    janitor.io/expires-at: '2000-01-01T00:00:00Z'
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: n05-protected
+  creationTimestamp: '2000-01-01T00:00:00Z'
+  labels:
+    kubernetes.io/metadata.name: n05-protected
+    janitor.io/ephemeral: 'true'
+    janitor.io/protected: 'true'
+  annotations:
+    janitor.io/expires-at: '2000-01-01T00:00:00Z'
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: n07-argocd
+  creationTimestamp: '2000-01-01T00:00:00Z'
+  labels:
+    kubernetes.io/metadata.name: n07-argocd
+    janitor.io/ephemeral: 'true'
+  annotations:
+    janitor.io/expires-at: '2000-01-01T00:00:00Z'
+    argocd.argoproj.io/tracking-id: p:/Namespace:n07-argocd/n07-argocd
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: n08-flux
+  creationTimestamp: '2000-01-01T00:00:00Z'
+  labels:
+    kubernetes.io/metadata.name: n08-flux
+    janitor.io/ephemeral: 'true'
+    kustomize.toolkit.fluxcd.io/name: p
+  annotations:
+    janitor.io/expires-at: '2000-01-01T00:00:00Z'
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: n10-helm
+  creationTimestamp: '2000-01-01T00:00:00Z'
+  labels:
+    kubernetes.io/metadata.name: n10-helm
+    janitor.io/ephemeral: 'true'
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    janitor.io/expires-at: '2000-01-01T00:00:00Z'
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: n11-future
+  creationTimestamp: '2000-01-01T00:00:00Z'
+  labels:
+    kubernetes.io/metadata.name: n11-future
+    janitor.io/ephemeral: 'true'
+  annotations:
+    janitor.io/expires-at: '2999-01-01T00:00:00Z'
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: n12-garbage
+  creationTimestamp: '2000-01-01T00:00:00Z'
+  labels:
+    kubernetes.io/metadata.name: n12-garbage
+    janitor.io/ephemeral: 'true'
+  annotations:
+    janitor.io/expires-at: garbage
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: n14-terminating
+  creationTimestamp: '2000-01-01T00:00:00Z'
+  labels:
+    kubernetes.io/metadata.name: n14-terminating
+    janitor.io/ephemeral: 'true'
+  annotations:
+    janitor.io/expires-at: '2000-01-01T00:00:00Z'
+  deletionTimestamp: '2000-01-01T00:00:00Z'
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: n15-default-ttl-old
+  creationTimestamp: '2000-01-01T00:00:00Z'
+  labels:
+    kubernetes.io/metadata.name: n15-default-ttl-old
+    janitor.io/ephemeral: 'true'
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: n16-default-ttl-new
+  creationTimestamp: '2999-01-01T00:00:00Z'
+  labels:
+    kubernetes.io/metadata.name: n16-default-ttl-new
+    janitor.io/ephemeral: 'true'

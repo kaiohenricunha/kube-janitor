@@ -1,0 +1,52 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: e14-standalone
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      terminationGracePeriodSeconds: 0
+      containers:
+      - name: done
+        image: busybox:1.36
+        command:
+        - 'true'
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: e14-native-ttl
+spec:
+  ttlSecondsAfterFinished: 3600
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      terminationGracePeriodSeconds: 0
+      containers:
+      - name: done
+        image: busybox:1.36
+        command:
+        - 'true'
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: e14-cron
+spec:
+  schedule: '*/1 * * * *'
+  successfulJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      template:
+        spec:
+          restartPolicy: Never
+          terminationGracePeriodSeconds: 0
+          containers:
+          - name: done
+            image: busybox:1.36
+            command:
+            - 'true'

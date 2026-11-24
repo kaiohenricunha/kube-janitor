@@ -60,3 +60,27 @@ spec:
             check:
               ($error != null): true
               (contains($stderr, 'G-PROT')): true
+    - name: r27-namespace-scoped-delete-grant
+      try:
+        - script:
+            content: |
+              set -e
+              for ns in g-ns-own g-ns-other; do kubectl create namespace $ns; done
+              # Patch on both namespaces; delete only on g-ns-own (a RoleBinding inside it).
+              kubectl -n g-ns-own create role ns-self --verb=get,patch,delete --resource=namespaces
+              kubectl -n g-ns-own create rolebinding ns-self --role=ns-self --serviceaccount=$NAMESPACE:patcher
+              kubectl -n g-ns-other create role ns-patch --verb=get,patch --resource=namespaces
+              kubectl -n g-ns-other create rolebinding ns-patch --role=ns-patch --serviceaccount=$NAMESPACE:patcher
+              kubectl label namespace g-ns-own janitor.io/ephemeral=true --as=system:serviceaccount:$NAMESPACE:patcher
+              echo "own namespace opt-in allowed"
+            check:
+              ($error): ~
+              (contains($stdout, 'own namespace opt-in allowed')): true
+        - script:
+            content: kubectl label namespace g-ns-other janitor.io/ephemeral=true --as=system:serviceaccount:$NAMESPACE:patcher
+            check:
+              ($error != null): true
+              (contains($stderr, 'G-OPT')): true
+      finally:
+        - script:
+            content: kubectl delete namespace g-ns-own g-ns-other --ignore-not-found --wait=false

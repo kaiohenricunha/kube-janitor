@@ -1,0 +1,27 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-janitor-policies
+  namespace: argocd
+spec:
+  project: platform
+  source:
+    repoURL: ghcr.io/kaiohenricunha/charts   # OCI registry, no scheme (Argo CD convention)
+    chart: kube-janitor-policies
+    targetRevision: 0.1.0                    # pin an exact version
+    helm:
+      valuesObject:
+        packs:
+          ephemeralPods:
+            enabled: true
+            mode: audit                      # review PolicyReports before mode: delete
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-janitor
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

@@ -1,0 +1,23 @@
+# G-MIX: creating a GitOps-marked object in a Namespace opted in for deletion returns an
+# admission warning (default metadataGuard.mixedOwnership: [Warn, Audit]) and is allowed.
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: mixed-ownership
+spec:
+  timeouts:
+    exec: 1m
+  steps:
+    - name: opt-in-namespace-far-future
+      try:
+        - script:
+            content: kubectl label namespace $NAMESPACE janitor.io/ephemeral=true && kubectl annotate namespace $NAMESPACE janitor.io/expires-at=2999-01-01T00:00:00Z
+            check:
+              ($error): ~
+    - name: gitops-object-warns
+      try:
+        - script:
+            content: kubectl -n $NAMESPACE apply -f configmap.yaml
+            check:
+              ($error): ~
+              (contains($stderr, 'G-MIX')): true

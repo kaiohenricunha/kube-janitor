@@ -1,0 +1,184 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: c01-no-optin
+  namespace: team-a
+  creationTimestamp: '2000-01-01T00:00:00Z'
+  labels: {}
+data:
+  k: v
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: c02-expired
+  namespace: team-a
+  creationTimestamp: '2000-01-01T00:00:00Z'
+  labels:
+    janitor.io/ephemeral: 'true'
+  annotations:
+    janitor.io/expires-at: '2000-01-01T00:00:00Z'
+data:
+  k: v
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: c03-default-ns
+  namespace: default
+  creationTimestamp: '2000-01-01T00:00:00Z'
+  labels:
+    janitor.io/ephemeral: 'true'
+  annotations:
+    janitor.io/expires-at: '2000-01-01T00:00:00Z'
+data:
+  k: v
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: c05-protected-label
+  namespace: team-a
+  creationTimestamp: '2000-01-01T00:00:00Z'
+  labels:
+    janitor.io/ephemeral: 'true'
+    janitor.io/protected: 'true'
+  annotations:
+    janitor.io/expires-at: '2000-01-01T00:00:00Z'
+data:
+  k: v
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: c06-protected-ns
+  namespace: prot-ns
+  creationTimestamp: '2000-01-01T00:00:00Z'
+  labels:
+    janitor.io/ephemeral: 'true'
+  annotations:
+    janitor.io/expires-at: '2000-01-01T00:00:00Z'
+data:
+  k: v
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: c07-argocd
+  namespace: team-a
+  creationTimestamp: '2000-01-01T00:00:00Z'
+  labels:
+    janitor.io/ephemeral: 'true'
+  annotations:
+    janitor.io/expires-at: '2000-01-01T00:00:00Z'
+    argocd.argoproj.io/tracking-id: a:/ConfigMap:team-a/c07
+data:
+  k: v
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: c08-flux
+  namespace: team-a
+  creationTimestamp: '2000-01-01T00:00:00Z'
+  labels:
+    janitor.io/ephemeral: 'true'
+    kustomize.toolkit.fluxcd.io/name: a
+  annotations:
+    janitor.io/expires-at: '2000-01-01T00:00:00Z'
+data:
+  k: v
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: c10-helm
+  namespace: team-a
+  creationTimestamp: '2000-01-01T00:00:00Z'
+  labels:
+    janitor.io/ephemeral: 'true'
+  annotations:
+    janitor.io/expires-at: '2000-01-01T00:00:00Z'
+    meta.helm.sh/release-name: r
+data:
+  k: v
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: c11-future
+  namespace: team-a
+  creationTimestamp: '2000-01-01T00:00:00Z'
+  labels:
+    janitor.io/ephemeral: 'true'
+  annotations:
+    janitor.io/expires-at: '2999-01-01T00:00:00Z'
+data:
+  k: v
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: c12-feb30
+  namespace: team-a
+  creationTimestamp: '2000-01-01T00:00:00Z'
+  labels:
+    janitor.io/ephemeral: 'true'
+  annotations:
+    janitor.io/expires-at: '2026-02-30T00:00:00Z'
+data:
+  k: v
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: c13-owned
+  namespace: team-a
+  creationTimestamp: '2000-01-01T00:00:00Z'
+  labels:
+    janitor.io/ephemeral: 'true'
+  annotations:
+    janitor.io/expires-at: '2000-01-01T00:00:00Z'
+  ownerReferences:
+  - apiVersion: v1
+    kind: Pod
+    name: p
+    uid: u
+data:
+  k: v
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: c14-terminating
+  namespace: team-a
+  creationTimestamp: '2000-01-01T00:00:00Z'
+  labels:
+    janitor.io/ephemeral: 'true'
+  annotations:
+    janitor.io/expires-at: '2000-01-01T00:00:00Z'
+  deletionTimestamp: '2000-01-01T00:00:00Z'
+data:
+  k: v
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: c15-default-ttl-old
+  namespace: team-a
+  creationTimestamp: '2000-01-01T00:00:00Z'
+  labels:
+    janitor.io/ephemeral: 'true'
+data:
+  k: v
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: c16-default-ttl-new
+  namespace: team-a
+  creationTimestamp: '2999-01-01T00:00:00Z'
+  labels:
+    janitor.io/ephemeral: 'true'
+data:
+  k: v

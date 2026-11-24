@@ -1,4 +1,6 @@
+# Every implemented pack enabled in audit mode.
 packs:
-  ephemeralPods:
-    enabled: true
-    mode: audit
+  ephemeralPods: {enabled: true, mode: audit, defaultTTL: 24h}
+  previewEnvironments: {enabled: true, mode: audit, defaultTTL: 72h}
+  temporaryConfigMaps: {enabled: true, mode: audit, defaultTTL: 168h}
+  completedJobsRetention: {enabled: true, mode: audit, retention: 168h}

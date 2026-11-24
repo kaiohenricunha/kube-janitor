@@ -1,0 +1,21 @@
+# E11: after `helm upgrade --reuse-values` from the previous chart, the pack still deletes
+# expired opted-in Pods (E2) and keeps protected ones (E3).
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: upgrade
+spec:
+  timeouts:
+    error: 4m
+    assert: 1m
+  steps:
+    - name: create-pods
+      try:
+        - apply:
+            file: pods.yaml
+    - name: expired-deleted-protected-kept
+      try:
+        - error:
+            file: deleted.yaml
+        - assert:
+            file: kept.yaml

@@ -1,0 +1,4 @@
+{{- $pack := .Values.packs.previewEnvironments -}}
+{{- if and $pack.enabled (eq $pack.mode "delete") }}
+{{ include "kjp.cleanupRole" (dict "root" $ "key" "previewEnvironments") }}
+{{- end }}
