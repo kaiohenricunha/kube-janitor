@@ -50,7 +50,7 @@ func main() {
 	flag.BoolVar(&cfg.EnableLeaderElection, "leader-elect", cfg.EnableLeaderElection,
 		"Enable leader election for high-availability deployments.")
 	flag.BoolVar(&cfg.DryRun, "dry-run", cfg.DryRun,
-		"If true (default), no resources will be deleted. Must be explicitly set to false to enable deletion.")
+		"Must be true (default). The controller is deprecated (ADR-0002) and refuses to start with --dry-run=false.")
 	flag.StringVar(&cfg.OTelEndpoint, "otel-endpoint", cfg.OTelEndpoint,
 		"OpenTelemetry collector gRPC endpoint (e.g., localhost:4317). Empty disables tracing.")
 	flag.DurationVar(&cfg.ScanInterval, "scan-interval", cfg.ScanInterval,

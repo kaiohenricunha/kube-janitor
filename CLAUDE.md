@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-kube-janitor is a Kubernetes cleanup controller written in Go. It watches cluster resources, classifies them, and applies policy-driven cleanup with strong safety controls. Module path: `github.com/kaiohenricunha/kube-janitor`. Go 1.23, controller-runtime v0.19.3.
+kube-janitor is a Kubernetes cleanup controller written in Go. It watches cluster resources, classifies them, and applies policy-driven cleanup with strong safety controls. Module path: `github.com/kaiohenricunha/kube-janitor`. Go 1.26, controller-runtime v0.19.3.
+
+**Direction change (ADR-0002).** The Go controller is deprecated and frozen in report-only mode: `config.Validate()` refuses `--dry-run=false`. Do not add features to it. New cleanup work goes into `charts/kube-janitor-policies/` (Kyverno `DeletingPolicy` pack). Read `docs/adr/0002-kyverno-native-cleanup.md`, `docs/specs/kyverno-policy-pack.md`, and `docs/plans/kyverno-migration.md` before any change.
 
 ## Build & Development Commands
 
@@ -146,8 +148,14 @@ Helm chart in `charts/kube-janitor/`. Key values: `controller.dryRun` (default `
 
 ## Roadmap
 
-- **Phase 0** ✓ — bootstrap: module, API types, interfaces, CI, Helm skeleton
-- **Phase 1** ✓ — dry-run reporting: all strategies, policy engine, namespace + configmap reconcilers, Events, metrics
-- **Phase 2** — safe deletion: confidence-gated deletion, envtest suite, deletion pre-flight hardening
-- **Phase 3** — resolver expansion: Secret, PVC, ServiceAccount resolvers, confidence scoring
-- **Phase 4** — optional Git provider integration, admission webhook, advanced features
+Source: `docs/plans/kyverno-migration.md` section 4.
+
+- **Controller Phases 0–1** ✓ — bootstrap and dry-run reporting (historical; the controller is now frozen).
+- **Migration Phase 0** — freeze the Go controller: refuse `--dry-run=false`, deprecation notes.
+- **Migration Phase 1** — `kube-janitor-policies` chart skeleton + `ephemeralPods` pack, metadata guard, preflight, policy/Helm/e2e tests.
+- **Migration Phase 2** — `previewEnvironments`, `temporaryConfigMaps`, `completedJobsRetention`; full Kubernetes 1.34–1.37 matrix; GitOps examples.
+- **Migration Phase 3** — release pipeline (OCI + cosign), Artifact Hub, GitOps e2e; deprecate `charts/kube-janitor`; v0.1.0.
+- **Migration Phase 4** (optional) — report-only analyzer from `internal/resolver` + `internal/domain`; remove the controller.
+- **Migration Phase 5** — v0.2 catalog.
+
+The old controller roadmap (Phase 2 safe deletion, Phase 3 resolver expansion, Phase 4 Git integration) is cancelled.

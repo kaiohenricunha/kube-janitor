@@ -12,9 +12,8 @@ nameOverride: ""
 fullnameOverride: ""
 
 controller:
-  ## dryRun controls whether kube-janitor will actually delete resources.
-  ## STRONGLY RECOMMENDED to start with true and only disable after validating
-  ## that policies produce expected findings.
+  ## dryRun must stay true. The controller is deprecated (docs/adr/0002-kyverno-native-cleanup.md)
+  ## and refuses to start with --dry-run=false. Use the kube-janitor-policies chart for cleanup.
   dryRun: true
 
   ## scanInterval is how often the controller re-evaluates all resources for TTL expiry.
