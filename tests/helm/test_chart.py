@@ -222,17 +222,42 @@ def test_h10_golden_files_match():
 
 
 def test_h11_everything_pinned():
-    workflow = ROOT / ".github" / "workflows" / "policies.yml"
-    for n, line in enumerate(workflow.read_text().splitlines(), 1):
-        m = re.search(r"uses:\s*(\S+)", line)
-        if m and not m.group(1).startswith("./"):
-            assert SHA_RE.search(m.group(1)), f"policies.yml:{n} action not pinned by SHA: {m.group(1)}"
+    # Every action in every workflow, and every image in chart templates, is pinned.
+    for workflow in sorted((ROOT / ".github" / "workflows").glob("*.yml")):
+        for n, line in enumerate(workflow.read_text().splitlines(), 1):
+            m = re.search(r"uses:\s*(\S+)", line)
+            if m and not m.group(1).startswith("./"):
+                assert SHA_RE.search(m.group(1)), f"{workflow.name}:{n} action not pinned by SHA: {m.group(1)}"
     for path in (CHART / "templates").rglob("*"):
         if path.is_file():
             for n, line in enumerate(path.read_text().splitlines(), 1):
                 m = re.search(r"image:\s*(\S+)", line)
                 if m and "{{" not in m.group(1):
                     assert "@sha256:" in m.group(1), f"{path.relative_to(ROOT)}:{n} image not pinned by digest"
+
+
+def test_h17_release_metadata():
+    chart = yaml.safe_load((CHART / "Chart.yaml").read_text())
+    assert re.fullmatch(r"\d+\.\d+\.\d+", chart["version"]), f"release version expected, got {chart['version']}"
+    assert chart["appVersion"] == chart["version"]
+    old = yaml.safe_load((ROOT / "charts" / "kube-janitor" / "Chart.yaml").read_text())
+    assert old.get("deprecated") is True, "charts/kube-janitor must be marked deprecated"
+    meta = (CHART / "artifacthub-repo.yml").read_text()
+    assert "@" not in meta, "artifacthub-repo.yml must not contain an email address"
+    assert yaml.safe_load(meta) is not None or meta.strip().startswith("#")
+
+
+def test_h18_release_workflow_shape():
+    wf = yaml.safe_load((ROOT / ".github" / "workflows" / "release-policies.yml").read_text())
+    on = wf.get("on") or wf.get(True)
+    assert on["push"]["tags"] == ["kube-janitor-policies-v*"], on
+    text = (ROOT / ".github" / "workflows" / "release-policies.yml").read_text()
+    for needle in ("helm package", "helm push", "cosign sign", "cosign verify", "artifacthub.io", "gh release create"):
+        assert needle in text, f"release workflow lacks: {needle}"
+    assert "uses: ./.github/workflows/policies.yml" in text, "release must reuse the Policies tests as a gate"
+    old = (ROOT / ".github" / "workflows" / "release.yml").read_text()
+    assert "goreleaser/goreleaser-action" not in old, "GoReleaser must be removed"
+    assert "helm/chart-releaser-action" not in old, "the deprecated chart must not be published"
 
 
 def update_golden():

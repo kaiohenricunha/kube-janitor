@@ -4,6 +4,7 @@ name: Policies
 # docs/specs/compatibility.md section 8; docs/specs/security-and-testing.md sections 6-7.
 
 on:
+  workflow_call: {}   # used by release-policies.yml as the release gate
   push:
     branches: [main]
     paths:
@@ -59,7 +60,7 @@ jobs:
       - name: Render tests H1-H11
         run: python3 tests/helm/test_chart.py
       - name: Shell scripts
-        run: shellcheck -S warning hack/*.sh tests/kyverno/run.sh tests/e2e/run.sh
+        run: shellcheck -S warning hack/*.sh tests/kyverno/run.sh tests/e2e/run.sh tests/gitops/run.sh
 
   e2e:
     name: End-to-end (kind ${{ matrix.k8s }})

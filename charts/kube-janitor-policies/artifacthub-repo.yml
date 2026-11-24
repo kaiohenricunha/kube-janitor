@@ -1,0 +1,10 @@
+# Artifact Hub repository metadata for oci://ghcr.io/kaiohenricunha/charts/kube-janitor-policies.
+#
+# The release workflow pushes this file to the special tag `artifacthub.io` with oras, as
+# documented in https://github.com/artifacthub/hub/blob/master/docs/helm_charts_repositories.md
+# (layer type application/vnd.cncf.artifacthub.repository-metadata.layer.v1.yaml).
+#
+# Registering the repository in the Artifact Hub control panel is a manual, account-bound step.
+# After registration, set repositoryID below (it enables the verified-publisher badge).
+# Ownership claims need an `owners` list with an email address; add it only in that step, not here.
+repositoryID: ""

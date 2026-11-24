@@ -1,0 +1,33 @@
+name: GitOps e2e
+
+# Nightly and on demand: the chart with real Argo CD and Flux on kind
+# (docs/specs/security-and-testing.md section 6.4, GO2, GO4, GO5). It is a release gate:
+# a release tag must point to a commit whose last run passed.
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  gitops-e2e:
+    name: GitOps e2e (Argo CD + Flux, kind 1.37)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: azure/setup-helm@2f5e7bc67f1f9972ab16657bb795f36d8f04de0e # v5.1.0
+        with:
+          version: v3.22.1
+      - name: Python dependencies
+        run: python3 -c 'import yaml' 2>/dev/null || python3 -m pip install --user pyyaml
+      - name: Install kind (pinned, checksum-verified)
+        run: hack/install-tools.sh kind
+      - name: Run GitOps scenarios
+        env:
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
+          REVISION: ${{ github.sha }}
+        run: tests/gitops/run.sh

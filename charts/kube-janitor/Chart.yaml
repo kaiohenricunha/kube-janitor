@@ -1,6 +1,9 @@
 apiVersion: v2
 name: kube-janitor
-description: A Kubernetes cleanup controller for orphaned, expired, and unused resources.
+description: >-
+  DEPRECATED (ADR-0002). Report-only Go controller; it refuses --dry-run=false.
+  Use the kube-janitor-policies chart.
+deprecated: true
 type: application
 version: 0.1.0
 appVersion: "0.1.0"
