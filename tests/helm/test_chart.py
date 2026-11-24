@@ -154,10 +154,13 @@ def golden_render(values):
 
 
 def test_h10_golden_files_match():
+    # Compare parsed documents, not bytes: Helm 3 and Helm 4 format the same objects differently
+    # (line folding of long strings). Any change in content still fails under both versions.
     for values, golden in golden_pairs():
         assert golden.exists(), f"missing golden file {golden.relative_to(ROOT)}; run --update-golden"
-        got = golden_render(values)
-        assert got == golden.read_text(), f"{golden.relative_to(ROOT)} is stale; run --update-golden and review the diff"
+        got = [d for d in yaml.safe_load_all(golden_render(values)) if d]
+        want = [d for d in yaml.safe_load_all(golden.read_text()) if d]
+        assert got == want, f"{golden.relative_to(ROOT)} is stale; run --update-golden (with Helm 3) and review the diff"
 
 
 def test_h11_everything_pinned():
