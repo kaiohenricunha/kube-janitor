@@ -1,6 +1,6 @@
 # Spec: Compatibility and installation preflight
 
-**Status**: Draft
+**Status**: Implemented in kube-janitor-policies 0.1.0 (results: [kyverno-migration.md](../plans/kyverno-migration.md) §6)
 **Date**: 2026-11-24
 **Phase**: migration Phase 1 (see [kyverno-migration.md](../plans/kyverno-migration.md))
 **Related**: [ADR-0002](../adr/0002-kyverno-native-cleanup.md), [kyverno-policy-pack.md](kyverno-policy-pack.md), [security-and-testing.md](security-and-testing.md)
@@ -50,7 +50,8 @@ Audit mode is the default mode of an enabled pack ([kyverno-policy-pack.md](kyve
 | CRD `validatingpolicies.policies.kyverno.io`, `v1` served | Audit policies use `apiVersion: policies.kyverno.io/v1`. | [local] rendered chart: `v1 served=True` |
 | Policy report CRDs | Installed by the Kyverno chart (`wgpolicyk8s.io` by default; OpenReports is optional). | [upstream] Kyverno chart subcharts `crds` and `openreports` |
 
-If the reports controller is disabled, audit mode produces no reports. Use the CLI preview (`hack/preview.sh`) instead.
+If the reports controller is disabled, audit mode produces no reports. The planned CLI preview
+(`hack/preview.sh`) is not implemented in 0.1.0 (R35); run `kyverno apply` with the rendered policies instead.
 
 ### 1.3 Not required
 
@@ -61,7 +62,7 @@ If the reports controller is disabled, audit mode produces no reports. Use the C
 | Kyverno reports controller in `delete` mode | Deletion does not use policy reports. (Audit mode needs it; section 1.2.) |
 | `PolicyException` (`policies.kyverno.io`) | [upstream] "PolicyExceptions are disabled by default" (exceptions guide). [upstream, inferred] The 1.20.0 cleanup controller does not register the exceptions flag, so it never loads exceptions (`cmd/cleanup-controller/main.go:116-129`, `fetch.go:58-63`); no doc or test confirms this. The pack does not rely on exceptions for safety. Exclusions are CEL conditions in each policy. |
 | Argo CD, Flux | Optional. See [gitops-integration.md](gitops-integration.md). |
-| A kube-janitor controller or image | The policy chart ships no workload. The optional preflight test Pod uses a pinned public `kubectl` image (section 4.3). |
+| A kube-janitor controller or image | The policy chart ships no workload. |
 
 ### 1.4 RBAC that the pack adds
 
@@ -77,7 +78,7 @@ The aggregate ClusterRole selects extra roles by label:
 - [upstream] `rbac.kyverno.io/aggregate-to-cleanup-controller: "true"` — https://kyverno.io/docs/installation/customization/
 - [local] Rendered `aggregationRule.clusterRoleSelectors` of `kj-kyverno:cleanup-controller` contains that label.
 
-The pack ships **one aggregated ClusterRole for each enabled policy pack**. It grants only the
+The pack ships **one aggregated ClusterRole for each pack in delete mode**. It grants only the
 `get`, `list`, `watch`, and `delete` verbs on only the kinds that pack targets. The pack never
 modifies Kyverno's default roles, as upstream recommends:
 [upstream] "it is highly recommended that default roles are not modified but new roles are used to extend them."
@@ -91,10 +92,10 @@ namespaces. Policy conditions do that. See [security-and-testing.md](security-an
 
 | Kubernetes | Upstream status on 2026-11-24 | Kyverno 1.20 | kube-janitor-policies v0.1 |
 |------------|-------------------------------|--------------|----------------------------|
-| 1.37 | Supported, EOL 2027-10-28 | Supported | **Tested** |
-| 1.36 | Supported, EOL 2027-06-28 | Supported | **Tested** |
-| 1.35 | Supported, EOL 2027-02-28 | Supported | **Tested** |
-| 1.34 | **Upstream EOL 2026-10-27** | Supported | **Tested** (until Kyverno drops it) |
+| 1.37 | Supported, EOL 2027-10-28 | Supported | **Tested** (CI e2e) |
+| 1.36 | Supported, EOL 2027-06-28 | Supported | **Tested** (CI e2e) |
+| 1.35 | Supported, EOL 2027-02-28 | Supported | **Tested** (CI e2e) |
+| 1.34 | **Upstream EOL 2026-10-27** | Supported | **Tested** (CI e2e; until Kyverno drops it) |
 | ≤ 1.33 | EOL | Not supported | Not supported. The chart `kubeVersion` blocks install. |
 | 1.38 | Planned 2026-12-16 | Not supported | Not supported until a Kyverno release supports it |
 
@@ -124,8 +125,7 @@ kindest/node:v1.35.8@sha256:07b2536e30b803ed61d1677a79df6115f798ce64c80f9e22f6ed
 kindest/node:v1.34.11@sha256:44e222ee2132dab25ff87301682f89eb82c7880ea3a1bf543bfe9708fd08d67d
 ```
 
-[local] This workstation has kind v0.31.0 (`kind version`), which predates these images.
-CI must pin kind v0.33.0 or later.
+`hack/install-tools.sh` installs kind v0.33.0 (pinned in `tests/versions.env`, checksum-verified) **[local]**.
 
 ## 3. Kyverno versions
 
@@ -142,7 +142,7 @@ CI must pin kind v0.33.0 or later.
   digest `sha256:290ff54d4b7d015ce2ffe5be84b60e2db5a59d8c5dcea772a8f6e32475c2eba2`, `appVersion: v1.20.0`, `kubeVersion: '>=1.25.0-0'`.
   The OCI location exists, but Kyverno documents only the HTTP repository `https://kyverno.github.io/kyverno/`.
 - [upstream] Kyverno support policy: "approximately three (3) months of community patch support"; minor releases "Roughly every 3 months"; the schedule lists one supported release at a time — https://kyverno.io/docs/installation/releases/
-- [upstream] The Kyverno CLI version equals the Kyverno version. Pinned install: download `kyverno-cli_v1.20.0_linux_x86_64.tar.gz` from the v1.20.0 GitHub release — https://kyverno.io/docs/subprojects/kyverno-cli/
+- [upstream] The Kyverno CLI version equals the Kyverno version. Pinned install: download `kyverno-cli_v1.20.0_linux_x86_64.tar.gz` from the v1.20.0 GitHub release — https://kyverno.io/docs/subprojects/kyverno-cli/ (automated in `hack/install-tools.sh`).
 
 ### 3.2 Minimum supported Kyverno: 1.20.0
 
@@ -180,8 +180,8 @@ Kyverno 1.17 – 1.19 may accept the manifests. They are **not supported** and a
 
 | Signal | Plain `helm install` | `helm template` (CI, Argo CD) | Flux helm-controller | Can it tell 1.17 from 1.20? |
 |--------|----------------------|-------------------------------|----------------------|-----------------------------|
-| `.Capabilities.APIVersions.Has "policies.kyverno.io/v1"` (group-version form) | Live discovery | Client-only: built-in groups plus `--api-versions` ([upstream] helm_template doc). Argo CD passes the target cluster's API versions ([upstream] "By default, Argo CD uses the API versions of the target cluster"). Whether Argo CD also passes Kind-level entries (`group/version/Kind`) is **[to-test]**, so the gate uses the group-version form only. | Live discovery **[unverified]** (inferred from the Helm SDK) | **No** — v1 is served in 1.17 – 1.20 |
-| `.Capabilities.KubeVersion` / `Chart.yaml kubeVersion` | Live | Client-only fake value; Argo CD uses the target cluster's version | Live **[unverified]** | n/a |
+| `.Capabilities.APIVersions.Has "policies.kyverno.io/v1"` (group-version form) | Live discovery | Client-only: built-in groups plus `--api-versions` ([upstream] helm_template doc). Argo CD passes the target cluster's API versions ([upstream] "By default, Argo CD uses the API versions of the target cluster"). With the group-version gate, an Argo CD v3.6.3 install of the chart rendered and synced **[local]** (GO5a, R34b). Whether Argo CD also passes Kind-level entries is still unknown and no longer matters. | Live discovery: a Flux v2.10.1 HelmRelease install passed the gate **[local]** (GO5b, R34b) | **No** — v1 is served in 1.17 – 1.20 |
+| `.Capabilities.KubeVersion` / `Chart.yaml kubeVersion` | Live | Client-only fake value; Argo CD uses the target cluster's version | Live (the GO5b install on Kubernetes 1.37 passed the `>=1.34.0-0` constraint) **[local]** | n/a |
 | `lookup` of the Kyverno Deployment image tag | Live | **Empty** ([upstream] "Helm is not supposed to contact the Kubernetes API Server during a helm template … operation"; Kyverno chart README: `helm template` … "never populate `lookup`") | Live **[unverified]** | Yes, but only where `lookup` works |
 
 **Conclusion.** No render-time signal is reliable across all three paths for the Kyverno
@@ -190,7 +190,7 @@ Kubernetes version.
 
 ### 4.3 Mechanism
 
-The preflight has three layers. None adds a running component.
+The preflight has two implemented layers and one planned layer. None adds a running component.
 
 **Layer 1 — render-time API gate (always on).**
 
@@ -204,29 +204,29 @@ The preflight has three layers. None adds a running component.
 - Escape hatch for offline rendering: `helm template --api-versions policies.kyverno.io/v1`.
   There is no values flag to skip the gate. A values flag would be copied into GitOps repositories and
   would silently disable the check.
+- `helm lint` does not execute template `fail` calls, so it passes even when the gate conditions are
+  violated; the chart's `helm template` tests (H7, H8) are the real gate tests **[local]** (R12).
 
 **Layer 2 — preflight script (on demand, no cluster component).**
 
-`hack/preflight.sh` uses only `kubectl` and the user's kubeconfig. It prints PASS or FAIL for each check
-and exits non-zero on any FAIL:
+`hack/preflight.sh` uses only `kubectl` and `jq` and the user's kubeconfig. It prints PASS, WARN, WAIT,
+or FAIL for each check and exits non-zero on any FAIL:
 
 | Check | How |
 |-------|-----|
 | P1 Kyverno cleanup controller Deployment exists and is Available | `kubectl get deploy -A -l app.kubernetes.io/component=cleanup-controller` and read `status.conditions` |
 | P2 Kyverno version ≥ 1.20.0 | Parse the image tag of the P1 Deployment. A digest-only or custom image gives WARN, not PASS. |
-| P3 `DeletingPolicy` v1 is served | `kubectl api-resources --api-group=policies.kyverno.io -o wide` |
-| P4 The cleanup controller can delete each kind that an *enabled* pack targets | Create an `authorization.k8s.io/v1` `SubjectAccessReview` for the cleanup controller ServiceAccount, for verbs `list` and `delete` on each kind. This uses `create subjectaccessreviews`, not impersonation. |
+| P3 `DeletingPolicy` v1 is served | `kubectl get --raw /apis/policies.kyverno.io/v1` lists `deletingpolicies` |
+| P4 The cleanup controller can delete each kind that a pack in delete mode targets | Create an `authorization.k8s.io/v1` `SubjectAccessReview` for the cleanup controller ServiceAccount, for verbs `list` and `delete` on each kind. This uses `create subjectaccessreviews`, not impersonation. |
 | P5 The metadata guard is active | `ValidatingAdmissionPolicy` and its binding exist. The binding `validationActions` contains `Deny`. |
 | P6 The pack's delete-mode policies run | Each `kube-janitor-*` `DeletingPolicy` exists, and its `status.lastExecutionTime` is set and newer than two schedule intervals. `status.conditionStatus.ready` is never set in 1.20.0 [upstream] (#18813), so P6 must not read it. Right after install, P6 reports WAIT, not FAIL, until one interval has passed. |
-| P8 No pre-armed TTL labels (run before switching a pack to `delete`) | For each kind the pack would grant, list objects that already carry `cleanup.kyverno.io/ttl` (`kubectl get <kind> -A -l cleanup.kyverno.io/ttl`). FAIL if any is in a protected namespace or carries `janitor.io/protected=true`; WARN for the rest and print them. The guard checks only additions and changes, so these labels become effective the moment delete RBAC is granted ([security-and-testing.md](security-and-testing.md) section 3.3). |
-| P7 Audit mode can report (only if a pack is in audit mode) | The reports controller Deployment (`app.kubernetes.io/component=reports-controller`) is Available, and `validatingpolicies.policies.kyverno.io` `v1` is served. |
+| P7 Audit mode can report (only if a pack is in audit mode) | The reports controller Deployment (`app.kubernetes.io/component=reports-controller`) is Available. |
+| P8 No pre-armed TTL labels (run before switching a pack to `delete`, `--kinds <kinds>`) | For each kind, list objects that already carry `cleanup.kyverno.io/ttl`. FAIL if any is in a protected namespace or carries `janitor.io/protected=true`; WARN for the rest and print them. The guard checks only additions and changes, so these labels become effective the moment delete RBAC is granted ([security-and-testing.md](security-and-testing.md) section 3.3). Proven in e2e: E16d **[local]**. |
 
-**Layer 3 — Helm test hook (opt-in, `preflight.helmTest.enabled: false` by default).**
-
-The chart can render a `helm.sh/hook: test` Pod that runs the same script with a pinned
-`kubectl` image (digest-pinned) and a dedicated ServiceAccount. Its RBAC is read-only plus
-`create subjectaccessreviews`. It runs only on `helm test`, or with Flux `spec.test.enable: true`.
-How Argo CD treats Helm test hooks is **[unverified]**. Argo CD users run the script (layer 2).
+**Layer 3 — Helm test hook: planned, not implemented in 0.1.0.** `preflight.helmTest.enabled: true` fails the
+render (R25). The planned design: a `helm.sh/hook: test` Pod that runs the same script with a digest-pinned
+`kubectl` image, a dedicated ServiceAccount, read-only RBAC plus `create subjectaccessreviews`. How Argo CD
+treats Helm test hooks is **[unverified]**.
 
 **Why there is no blocking install hook.** A `pre-install` Job would block Argo CD and Flux syncs
 on transient failures, and [upstream] both tools let users skip hooks (Kyverno chart README:
@@ -254,20 +254,20 @@ helm install kyverno kyverno/kyverno --version 3.10.0 \
   --set config.generateSuccessEvents=true
 ```
 
-The OCI location `oci://ghcr.io/kyverno/charts/kyverno` also works [local] but is not documented upstream.
-The README links to the upstream installation guide for production settings (high availability, webhooks).
-Installing Kyverno with Argo CD needs `ServerSideApply=true` (K3).
+The OCI location `oci://ghcr.io/kyverno/charts/kyverno` also works [local] (the e2e suites use it) but is
+not documented upstream. Installing Kyverno with Argo CD needs `ServerSideApply=true` (K3).
 
 ## 5. Helm and CLI requirements
 
 | Tool | Requirement | Tested in CI | Notes |
 |------|-------------|--------------|-------|
-| Helm 4 | 4.3.x | Yes | [upstream] Helm 4.0.0 released 2025-11-12; latest 4.3.2 (2026-11-13). Argo CD 3.5+ renders only with Helm 4. Helm 4 defaults to server-side apply for new releases. `helm registry login` takes the domain name only. |
-| Helm 3 | ≥ 3.8 (OCI). Tested 3.22.x. | Yes, until 2027-02-10 | [upstream] Helm 3 security fixes end 2027-02-10 (https://helm.sh/blog/helm-v3-end-of-life/). Drop Helm 3 from CI after that date. [local] Workstation has Helm v3.20.1. |
-| Kyverno CLI | Same version as the minimum Kyverno (v1.20.0) | Yes | Used for `kyverno test` (see [security-and-testing.md](security-and-testing.md)). |
-| kubectl | Within ±1 minor of the cluster | Yes (preflight) | — |
-| kind | ≥ v0.33.0 | Yes | Section 2.2. |
-| Chainsaw | **[unverified]** — no version was researched. Pin the latest release in `tests/versions.env` during Phase 1. | Yes | End-to-end tests. Kyverno's own conformance tests use it for `DeletingPolicy` [upstream]. |
+| Helm 4 | 4.3.x | Yes (`chart-render`, 4.3.2) | [upstream] Helm 4.0.0 released 2025-11-12; latest 4.3.2 (2026-11-13). Argo CD 3.5+ renders only with Helm 4. Helm 4 folds long strings differently from Helm 3, so golden files are compared as parsed YAML **[local]** (R18). |
+| Helm 3 | ≥ 3.8 (OCI). Tested 3.22.x. | Yes, until 2027-02-10 | [upstream] Helm 3 security fixes end 2027-02-10 (https://helm.sh/blog/helm-v3-end-of-life/). Drop Helm 3 from CI after that date. |
+| Kyverno CLI | Same version as the minimum Kyverno (v1.20.0) | Yes (`policy-unit`) | Used for `kyverno test` (see [security-and-testing.md](security-and-testing.md)). |
+| kubectl | Within ±1 minor of the cluster | Yes (preflight, e2e) | — |
+| kind | v0.33.0 | Yes (`e2e`, `gitops-e2e`) | Section 2.2. |
+| Chainsaw | v0.2.15 (pinned in `tests/versions.env`, checksum-verified by `hack/install-tools.sh`) **[local]** (R13) | Yes (`e2e`) | Kyverno's own conformance tests use it for `DeletingPolicy` [upstream]. Default script timeout is 5 s; tests set `timeouts.exec` (R17). |
+| Argo CD / Flux | v3.6.3 / v2.10.1 (pinned in `tests/versions.env`) | Nightly (`gitops-e2e`) | Argo CD v3.6.3 was released on 2026-11-24 (R33). |
 
 Chart format: `apiVersion: v2`. [upstream] Helm 4: "v2 charts continue to work unchanged."
 
@@ -275,17 +275,17 @@ Chart format: `apiVersion: v2`. [upstream] Helm 4: "v2 charts continue to work u
 
 | Event | Expected behavior | Action |
 |-------|-------------------|--------|
-| Kyverno 1.20.x patch | No change. | CI runs nightly against the latest 1.20.x patch. |
+| Kyverno 1.20.x patch | No change. | Planned: a nightly job against the latest 1.20.x patch (section 8). |
 | Kyverno 1.21 | Legacy CRDs removed; storage version may move to `v1`. The pack uses neither legacy kinds nor `v1beta1`. | Add 1.21 to the matrix before claiming support. Keep 1.20 for one more pack minor (N-1). |
 | Kyverno removes `v1beta1` | No impact. | None. |
 | Kubernetes 1.38 | Not supported until a Kyverno release supports it. | Follow Kyverno. |
-| kube-janitor-policies upgrade | Helm updates `DeletingPolicy` objects in place. A pack that was disabled stays disabled. Value renames follow section 7. | Upgrade tests in CI (see [security-and-testing.md](security-and-testing.md)). |
+| kube-janitor-policies upgrade | Helm updates `DeletingPolicy` objects in place. A pack that was disabled stays disabled. Value renames follow section 7. | Upgrade test E11 runs on every PR against the chart on `main` **[local]**. |
 | Kyverno uninstalled while the pack is installed | The `DeletingPolicy` CRD and objects are removed with Kyverno's CRDs, or they stay inert. No deletion happens without the cleanup controller. | Document. |
 
 ## 7. Versioning and deprecation policy
 
 - The chart follows SemVer. `version` and `appVersion` are equal. The chart has no image.
-- Before 1.0.0, a minor release can change values. Each change is listed in `CHANGELOG.md` with a migration note.
+- Before 1.0.0, a minor release can change values. Each change is listed in `charts/kube-janitor-policies/CHANGELOG.md` with a migration note.
 - A renamed or removed values key is deprecated for at least one minor release first. During that release, the
   old key still works and `NOTES.txt` prints a warning.
 - A change that can **widen** what a policy deletes (new kind, looser default, longer selector) is a
@@ -293,30 +293,32 @@ Chart format: `apiVersion: v2`. [upstream] Helm 4: "v2 charts continue to work u
 - Each pack release states the Kyverno minors it is tested with. After Kyverno 1.21 ships, the pack supports
   the current Kyverno minor and the previous one (N-1), because upstream patches only the current minor for about three months.
 - Policy object names are stable. A rename is a breaking change, because metrics labels and user dashboards use them.
+- A release is published by pushing the tag `kube-janitor-policies-v<version>` that matches `Chart.yaml`
+  (`.github/workflows/release-policies.yml`).
 
 ## 8. Compatibility test strategy
 
 | Job | Trigger | Matrix | Gate |
 |-----|---------|--------|------|
-| `policy-unit` | Every PR | Kyverno CLI v1.20.0 | Required |
-| `chart-render` | Every PR | Helm 3.22.x and 4.3.x; `helm template` with and without `--api-versions` | Required |
-| `e2e` | Every PR that touches `charts/kube-janitor-policies/` or `tests/` | Kubernetes 1.34, 1.35, 1.36, 1.37 (kind v0.33.0 digests) × Kyverno chart 3.10.0 | Required |
-| `e2e-latest` | Nightly | Latest Kyverno 1.20.x patch and latest kind | Opens an issue on failure; not a merge gate |
-| `e2e-next` | Weekly, when a Kyverno RC exists | Kyverno next RC on Kubernetes 1.37 | Informational |
-| `gitops-e2e` | Nightly and before release | Kubernetes 1.37 + Argo CD 3.6.x, and + Flux 2.10.x | Release gate |
+| `policy-unit` | Every PR that touches the chart, `tests/`, or `hack/` | Kyverno CLI v1.20.0 | Required |
+| `chart-render` | Same | Helm 3.22.1 and 4.3.2; `helm template` with and without `--api-versions` | Required |
+| `e2e` | Same | Kubernetes 1.34, 1.35, 1.36, 1.37 (kind v0.33.0 digests) × Kyverno chart 3.10.0 | Required; also the release gate (`workflow_call` from `release-policies.yml`) |
+| `gitops-e2e` | Nightly and on demand (`.github/workflows/gitops-e2e.yml`) | Kubernetes 1.37 + Argo CD v3.6.3, and + Flux v2.10.1 | Release gate (GO2, GO4, GO5; GO3 and GO6 not run, R32) |
+| `e2e-latest` | Planned: nightly | Latest Kyverno 1.20.x patch and latest kind | Not implemented in 0.1.0 |
+| `e2e-next` | Planned: weekly, when a Kyverno RC exists | Kyverno next RC on Kubernetes 1.37 | Not implemented in 0.1.0 |
 
-Pinned versions live in one file (`tests/versions.env`). A dependency bot proposes updates.
-The full test definitions are in [security-and-testing.md](security-and-testing.md).
+Pinned versions live in one file (`tests/versions.env`). The full test definitions are in
+[security-and-testing.md](security-and-testing.md).
 
 ## 9. Could not verify
 
 1. The Kubernetes range of Kyverno 1.18 (docs page is stale).
-2. How Flux populates `.Capabilities` and `lookup` (inferred: live cluster).
-3. How Argo CD handles Helm `test` hooks.
-4. Whether Argo CD passes Kind-level entries in `.Capabilities.APIVersions` (section 4.2).
+2. How Flux populates `lookup` (the render gate does not use it; Flux passes the gate, R34b).
+3. How Argo CD handles Helm `test` hooks (the chart has no test hook in 0.1.0).
+4. Whether Argo CD passes Kind-level entries in `.Capabilities.APIVersions` (the gate does not need them; Argo CD passes it, R34b).
 5. No Kyverno statement on Helm 4 or on a minimum Helm version.
 6. Kyverno does not document its OCI chart location, although the artifact exists.
-7. A Chainsaw version.
+7. Whether the first GHCR push makes the chart package private (R31).
 
 Items K4 (success events) and the `PolicyException` question (section 1.3) rest on source reading only.
 They are tagged **[upstream, inferred]** and the design does not depend on them.
