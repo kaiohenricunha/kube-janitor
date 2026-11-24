@@ -1,5 +1,13 @@
 # kube-janitor
 
+> [!WARNING]
+> **This controller is deprecated and frozen in report-only mode.** An audit found defects in its
+> deletion path ([migration plan, section 2](docs/plans/kyverno-migration.md#2-audit-of-the-current-go-controller)),
+> so the binary now refuses to start with `--dry-run=false`.
+> kube-janitor is moving to **kube-janitor-policies**, a Helm chart of Kyverno `DeletingPolicy`
+> resources. See [ADR-0002](docs/adr/0002-kyverno-native-cleanup.md) and the
+> [design spec](docs/specs/kyverno-policy-pack.md). The policy chart is under development and not yet published.
+
 A Kubernetes cleanup controller that continuously classifies resources and applies
 policy-driven cleanup with strong safety controls.
 
@@ -9,9 +17,9 @@ kube-janitor watches your cluster resources and:
 - **Classifies** each resource as active, expired, orphaned, abandoned, protected, or blocked
 - **Evaluates** JanitorPolicy CRDs to determine what action to take
 - **Reports** findings as Kubernetes Events, structured logs, and Prometheus metrics
-- **Deletes** resources only when confidence is high, action mode is `Delete`, and global dry-run is disabled
+- ~~**Deletes** resources only when confidence is high, action mode is `Delete`, and global dry-run is disabled~~ — disabled: the controller refuses `--dry-run=false` (ADR-0002)
 
-**By default, kube-janitor runs in dry-run mode — it never deletes anything until you explicitly opt in.**
+**kube-janitor runs only in dry-run mode. It never deletes anything.**
 
 ## Supported resource kinds (Phase 1)
 
@@ -73,7 +81,7 @@ Classification strategy chain (priority order — first match wins):
 6. `ResolverStrategy` — any resolver finds a live reference?
 
 **Safety controls:**
-- `--dry-run=true` is the default. Nothing is deleted without explicit opt-in.
+- `--dry-run=true` is the only accepted value. The binary exits with an error on `--dry-run=false`.
 - Confidence ≥ 0.9 required for auto-deletion.
 - Protected namespace blocklist: `kube-system`, `kube-public`, `default`, `kube-node-lease`.
 - Pre-flight check before every deletion: re-GET object, verify UID, check finalizers.
@@ -83,7 +91,7 @@ Classification strategy chain (priority order — first match wins):
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--dry-run` | `true` | Global dry-run override (safe default) |
+| `--dry-run` | `true` | Must be `true`; `false` is refused (ADR-0002) |
 | `--scan-interval` | `5m` | How often to re-scan all resources for TTL expiry |
 | `--metrics-bind-address` | `:8080` | Prometheus metrics endpoint |
 | `--health-probe-bind-address` | `:8081` | Health/readiness probe endpoint |
