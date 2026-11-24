@@ -139,8 +139,8 @@ func TestClassifier_FinalizerBlocked(t *testing.T) {
 	// even if it is expired (finalizer takes priority in the chain).
 	obj := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "finalizer-cm",
-			Namespace: "test-ns",
+			Name:       "finalizer-cm",
+			Namespace:  "test-ns",
 			Finalizers: []string{"some-other-controller/cleanup"},
 			Annotations: map[string]string{
 				"janitor.io/ttl": "1h",
