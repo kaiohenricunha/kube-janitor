@@ -30,6 +30,9 @@ go.work.sum
 # Build output
 bin/
 
+# Local Claude Code settings (private, never commit)
+.claude/settings.local.json
+
 # Editor/IDE
 # .idea/
 # .vscode/
