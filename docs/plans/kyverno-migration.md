@@ -247,6 +247,40 @@ hack/preflight.sh                                  # against the same kind clust
 
 After kind runs, delete the cluster, and run `docker volume prune -f`.
 
+## 6. Implementation results (pending transfer to the specs)
+
+The owner decided on 2026-11-24 that the autonomous run records `[to-test]` results here and in
+the PR bodies, and that one final docs PR moves them into `docs/specs/`. Each row names the spec
+text that the final PR must change.
+
+### 6.1 Phase 0 (PR #3)
+
+| Result | Evidence | Spec change |
+|--------|----------|-------------|
+| `config.Validate()` refuses `DryRun=false`; the binary exits 1 with a message that names ADR-0002. | `internal/config/validation_test.go`; feature run in PR #3 | none |
+
+### 6.2 Phase 1 (chart skeleton + `ephemeralPods`)
+
+| # | `[to-test]` item (`kyverno-policy-pack.md` §6.3 unless noted) | Result | Evidence | Spec change |
+|---|---------------------------------------------------------------|--------|----------|-------------|
+| R1 | Item 1: CEL optional syntax `.?labels`, `[?'key']`, `orValue` | **Compiles and works** in Kyverno 1.20.0 `DeletingPolicy` and `ValidatingPolicy`. The spec's earlier `.?['key']` form was invalid and was already corrected in PR #1. | `kyverno test` suites `tests/kyverno/ephemeral-pods{,-audit}` (22/22 each) | Remove the tag. |
+| R2 | Item 2: `namespaceObject` for a cluster-scoped `DeletingPolicy` matching namespaced kinds | **Populated.** The `not-protected` condition reads the namespace label correctly. | same suites (case k06 uses a protected namespace label; the `namespaceSelector` excludes it first) | Remove the tag. |
+| R3 | Item 3: `timestamp(object.metadata.creationTimestamp)` | **Works** on the unstructured string. | case k15 (default TTL) | Remove the tag. |
+| R4 | Item 4: regex guard against malformed values | **Works** for `garbage` and `2026-13-45T99:99:99Z`. | cases k12a, k12b | Remove the tag. |
+| R5 | Item 5: day-of-month overflow `2026-02-30T00:00:00Z` | **The regex alone is not enough:** it passes the regex, and `timestamp()` then fails with `type conversion error from 'string' to 'google.protobuf.Timestamp'`. In the cluster, that error would fail the whole run (#18248). **Fix:** a calendar check with `substring`/`int` and leap-year rules before `timestamp()` (`kjp.validDateCEL` in `templates/_conditions.tpl`). | probe run, then cases k12c–k12h (Feb 29 in 2024/2025/1900, Apr 31, Dec 31) | **Change §5.3 and the §6.3 example** to the calendar check; record that Kyverno CEL has `substring` and `int()`. |
+| R6 | Item 6: `namespaceObject` for kind `Namespace` | Not tested in Phase 1 (no Namespace pack). The Namespace variant of the helpers never references `namespaceObject`. | `templates/_conditions.tpl` (`scope != Namespaced` branch) | Keep the tag until Phase 2. |
+| R7 | Item 7: selector before CEL | The CLI reports `namespaceSelector`/`objectSelector` exclusions as `skip` (not evaluated), so CEL `not-protected-namespace` is a second layer. | cases k01, k03, k05, k06 → `skip` | Remove the tag. |
+| R8 | §7 audit mode: `ValidatingPolicy` with `time.now()` and `namespaceObject` | **Compiles; verdicts equal the delete policy (A1)** in the CLI. In-cluster background reporting: see R11. | `tests/kyverno/ephemeral-pods-audit` 22/22 | Update §7. |
+| R9 | Audit policy autogen | `autogen.podControllers.controllers: []` is accepted by the v1 schema; set it so that Kyverno generates no Deployment/StatefulSet rules from a Pod policy. | `tests/golden/audit.yaml`; H3 | Add to §7. |
+| R10 | `kyverno test` rejects non-policy documents in a policy file | `policy type not supported` for `ClusterRole`. The runner renders each policy alone with `helm template --show-only`. | `tests/kyverno/run.sh` | Add to `security-and-testing.md` §6.1. |
+| R11 | In-cluster results (kind 1.37.0, Kyverno 3.10.0 / v1.20.0) | **All Phase 1 scenarios pass:** E1 (preflight P1–P8 all PASS), E2, E3, E5, E6, E7, E8, E10, E12, E13 (0 dropped runs, 0 policy errors), E15, E16 a–d. The audit `ValidatingPolicy` background scan writes a `PolicyReport` fail result for a would-delete Pod (so `time.now()` and `namespaceObject` work in background scans; the §7 fallback to `hack/preview.sh` is not needed). `helm upgrade --reuse-values` re-creates a ClusterRole deleted out of band. | `tests/e2e/run.sh` and `tests/chainsaw/ephemeral-pods/*` | Update §7 and `security-and-testing.md` §6.3 (results). |
+| R16 | TTL arming and `resourceFilters` (`security-and-testing.md` §3.3, was **[inferred]**) | **Confirmed in-cluster.** `kyverno_ttl_controller_info{resource_resource="pods"}` appears only after delete mode grants Pods. Then Pods labeled `cleanup.kyverno.io/ttl` that existed before the guard were deleted in **both `default` and `kube-public`**, although `kube-public` is in Kyverno's default `resourceFilters`. P8 caught both before the switch. | e2e driver observation and E16d | Change the tag to **[local]**; strengthen the P8 rationale. |
+| R17 | Chainsaw script timeout | The default `exec` timeout is 5 s; a script with four `kubectl` calls was killed (`signal: killed`). Tests that run scripts set `timeouts.exec: 3m`. | first e2e run, `rbac-scope` | Add to `security-and-testing.md` §6.3. |
+| R12 | `helm lint` and the render gate | `helm lint` does not execute template `fail` calls, so lint passes even when the gate conditions are violated. H7 and H8 (`helm template`) are the real gate tests. | local Helm 3.20.1 | Add to `compatibility.md` §4.3. |
+| R13 | Chainsaw version (`compatibility.md` §5, was **[unverified]**) | Pinned to v0.2.15 (latest release, 2026-05-06), checksum-verified. | `tests/versions.env`, `hack/install-tools.sh` | Replace the tag. |
+| R14 | E15 scope in Phase 1 | `temporaryConfigMaps` is not implemented yet, so E15 runs with only `ephemeralPods` in delete mode and checks that ConfigMaps, Namespaces, and Jobs are denied. | `tests/chainsaw/ephemeral-pods/40-rbac-scope` | Note in `security-and-testing.md` E15. |
+| R15 | Enabling an unimplemented pack | The render gate fails with `packs.<key> is not implemented` instead of silently rendering nothing. | H6 | Note in `kyverno-policy-pack.md` §8. |
+
 ## Appendix A: Audit probe
 
 The probe was saved as `internal/zzaudit/audit_test.go`, run once, and deleted.

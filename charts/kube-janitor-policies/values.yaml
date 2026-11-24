@@ -1,0 +1,62 @@
+# kube-janitor-policies values.
+# Design: docs/specs/kyverno-policy-pack.md. Every pack is disabled by default.
+# An enabled pack starts in audit mode (reports only). Nothing is deleted until a pack is
+# both enabled and switched to mode: delete.
+
+global:
+  # -- Namespace where Kyverno runs. It is added to the built-in protected namespaces
+  # (kube-system, kube-public, kube-node-lease, default), which cannot be removed.
+  kyvernoNamespace: kyverno
+  # -- Extra protected namespaces. Additive only.
+  extraProtectedNamespaces: []
+  # -- Default cron schedule for every pack (cleanup controller local time, normally UTC).
+  schedule: "*/10 * * * *"
+  # -- Deletion propagation for every pack: Background, Foreground, or Orphan.
+  deletionPropagationPolicy: Background
+
+packs:
+  # Standalone Pods labeled janitor.io/ephemeral=true.
+  ephemeralPods:
+    enabled: false
+    # -- audit | delete
+    mode: audit
+    # -- Lifetime when janitor.io/expires-at is absent, from creationTimestamp. Go duration (h or m).
+    defaultTTL: 24h
+    # -- Cron schedule; empty uses global.schedule.
+    schedule: ""
+  # Namespaces labeled janitor.io/ephemeral=true (implemented in a later release).
+  previewEnvironments:
+    enabled: false
+    mode: audit
+    defaultTTL: 72h
+    schedule: ""
+  # ConfigMaps labeled janitor.io/ephemeral=true (implemented in a later release).
+  temporaryConfigMaps:
+    enabled: false
+    mode: audit
+    defaultTTL: 168h
+    schedule: ""
+  # Finished standalone Jobs in namespaces labeled janitor.io/job-retention=enabled
+  # (implemented in a later release).
+  completedJobsRetention:
+    enabled: false
+    mode: audit
+    retention: 168h
+    schedule: ""
+
+metadataGuard:
+  # -- ValidatingAdmissionPolicyBinding actions for guard rules G-OPT, G-FMT, G-PROT, G-NS.
+  # Must contain Deny whenever any pack is in delete mode.
+  validationActions: [Deny]
+  # -- Actions for rule G-MIX (GitOps object created in an opted-in namespace; later release).
+  mixedOwnership: [Warn, Audit]
+
+preflight:
+  helmTest:
+    # -- Render the opt-in helm test Pod (later release).
+    enabled: false
+
+monitoring:
+  prometheusRule:
+    # -- Render a PrometheusRule with deletion alerts (later release).
+    enabled: false

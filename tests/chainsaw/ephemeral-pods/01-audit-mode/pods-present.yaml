@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: a-expired
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: a-ttl-label

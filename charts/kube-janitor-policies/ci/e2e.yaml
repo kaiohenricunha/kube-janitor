@@ -1,0 +1,8 @@
+# End-to-end tests: one-minute schedule, short default TTL.
+global:
+  schedule: "*/1 * * * *"
+packs:
+  ephemeralPods:
+    enabled: true
+    mode: delete
+    defaultTTL: 1m

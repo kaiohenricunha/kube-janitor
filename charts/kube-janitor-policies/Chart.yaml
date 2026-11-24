@@ -1,0 +1,24 @@
+apiVersion: v2
+name: kube-janitor-policies
+description: >-
+  Kyverno DeletingPolicy pack that removes Kubernetes resources explicitly marked as
+  temporary, after their expiry. Every pack is disabled by default; an enabled pack
+  starts in audit mode.
+type: application
+version: 0.1.0-dev
+appVersion: "0.1.0-dev"
+kubeVersion: ">=1.34.0-0"
+home: https://github.com/kaiohenricunha/kube-janitor
+sources:
+  - https://github.com/kaiohenricunha/kube-janitor
+keywords:
+  - kubernetes
+  - kyverno
+  - cleanup
+  - ttl
+  - policy
+maintainers:
+  - name: kaiohenricunha
+    url: https://github.com/kaiohenricunha
+annotations:
+  artifacthub.io/license: Apache-2.0

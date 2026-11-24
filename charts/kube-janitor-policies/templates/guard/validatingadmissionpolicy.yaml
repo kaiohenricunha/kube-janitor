@@ -1,0 +1,84 @@
+{{- include "kjp.gate" . -}}
+{{- if eq (include "kjp.anyEnabled" .) "true" }}
+{{- $defs := include "kjp.packDefs" . | fromYaml }}
+{{- $protected := include "kjp.protectedNamespacesCEL" . }}
+{{- $lbl := "object.metadata.?labels.orValue({})" }}
+{{- $ann := "object.metadata.?annotations.orValue({})" }}
+{{- $oldLbl := "oldObject.metadata.?labels.orValue({})" }}
+{{- $oldAnn := "oldObject.metadata.?annotations.orValue({})" }}
+# Metadata guard (docs/specs/security-and-testing.md section 4).
+# G-NS   no cleanup metadata may be added or changed in a protected namespace.
+# G-OPT  only a principal allowed to delete the object may add or change
+#        janitor.io/ephemeral, janitor.io/job-retention, cleanup.kyverno.io/ttl, or
+#        janitor.io/expires-at (also its removal while the opt-in stays).
+# G-PROT only a principal allowed to delete the object may remove janitor.io/protected=true.
+# G-FMT  janitor.io/expires-at must be a real UTC date: YYYY-MM-DDTHH:MM:SSZ.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: kube-janitor-metadata-guard
+  labels:
+    {{- include "kjp.labels" . | nindent 4 }}
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      {{- range $key, $pack := .Values.packs }}
+      {{- if $pack.enabled }}
+      {{- $def := index $defs $key }}
+      - apiGroups: [{{ $def.apiGroup | quote }}]
+        apiVersions: [{{ $def.apiVersion | quote }}]
+        resources: [{{ $def.resource | quote }}]
+        operations: ["CREATE", "UPDATE"]
+      {{- end }}
+      {{- end }}
+  matchConditions:
+    - name: touches-cleanup-metadata
+      expression: {{ printf "%s.exists(k, k.startsWith('janitor.io/') || k == 'cleanup.kyverno.io/ttl') || %s.exists(k, k.startsWith('janitor.io/')) || (oldObject != null && (%s.exists(k, k.startsWith('janitor.io/') || k == 'cleanup.kyverno.io/ttl') || %s.exists(k, k.startsWith('janitor.io/'))))" $lbl $ann $oldLbl $oldAnn | quote }}
+  variables:
+    - name: newOptIn
+      expression: {{ printf "%s[?'janitor.io/ephemeral'].orValue('')" $lbl | quote }}
+    - name: oldOptIn
+      expression: {{ printf "oldObject == null ? '' : %s[?'janitor.io/ephemeral'].orValue('')" $oldLbl | quote }}
+    - name: newRetention
+      expression: {{ printf "%s[?'janitor.io/job-retention'].orValue('')" $lbl | quote }}
+    - name: oldRetention
+      expression: {{ printf "oldObject == null ? '' : %s[?'janitor.io/job-retention'].orValue('')" $oldLbl | quote }}
+    - name: newTTL
+      expression: {{ printf "%s[?'cleanup.kyverno.io/ttl'].orValue('')" $lbl | quote }}
+    - name: oldTTL
+      expression: {{ printf "oldObject == null ? '' : %s[?'cleanup.kyverno.io/ttl'].orValue('')" $oldLbl | quote }}
+    - name: newExpiry
+      expression: {{ printf "%s[?'janitor.io/expires-at'].orValue('')" $ann | quote }}
+    - name: oldExpiry
+      expression: {{ printf "oldObject == null ? '' : %s[?'janitor.io/expires-at'].orValue('')" $oldAnn | quote }}
+    - name: newProtected
+      expression: {{ printf "%s[?'janitor.io/protected'].orValue('')" $lbl | quote }}
+    - name: oldProtected
+      expression: {{ printf "oldObject == null ? '' : %s[?'janitor.io/protected'].orValue('')" $oldLbl | quote }}
+    - name: lifecycleChanged
+      expression: "(variables.newOptIn != '' && variables.newOptIn != variables.oldOptIn) || (variables.newRetention != '' && variables.newRetention != variables.oldRetention) || (variables.newTTL != '' && variables.newTTL != variables.oldTTL) || (variables.newExpiry != '' && variables.newExpiry != variables.oldExpiry) || (variables.newExpiry == '' && variables.oldExpiry != '' && variables.newOptIn != '')"
+    - name: protectionRemoved
+      expression: "variables.oldProtected == 'true' && variables.newProtected != 'true'"
+    - name: targetNamespace
+      expression: "request.resource.resource == 'namespaces' ? object.metadata.name : request.namespace"
+    - name: inProtectedNamespace
+      expression: {{ printf "variables.targetNamespace in %s" $protected | quote }}
+    - name: canDelete
+      expression: "authorizer.group(request.resource.group).resource(request.resource.resource).namespace(request.namespace).name(object.metadata.name).check('delete').allowed()"
+    - name: expiryValid
+      expression: {{ include "kjp.validDateCEL" "variables.newExpiry" | quote }}
+  validations:
+    - expression: "!(variables.lifecycleChanged && variables.inProtectedNamespace)"
+      messageExpression: "'kube-janitor guard G-NS: cleanup metadata is not allowed in protected namespace ' + variables.targetNamespace"
+      reason: Forbidden
+    - expression: "!variables.lifecycleChanged || variables.canDelete"
+      messageExpression: "'kube-janitor guard G-OPT: only a principal allowed to delete ' + request.resource.resource + '/' + object.metadata.name + ' may set or change its cleanup metadata (janitor.io/ephemeral, janitor.io/expires-at, janitor.io/job-retention, cleanup.kyverno.io/ttl)'"
+      reason: Forbidden
+    - expression: "!variables.protectionRemoved || variables.canDelete"
+      messageExpression: "'kube-janitor guard G-PROT: only a principal allowed to delete ' + request.resource.resource + '/' + object.metadata.name + ' may remove janitor.io/protected=true'"
+      reason: Forbidden
+    - expression: "variables.newExpiry == '' || variables.newExpiry == variables.oldExpiry || variables.expiryValid"
+      messageExpression: "'kube-janitor guard G-FMT: janitor.io/expires-at must be a real UTC date in the form YYYY-MM-DDTHH:MM:SSZ, got ' + variables.newExpiry"
+      reason: Invalid
+{{- end }}

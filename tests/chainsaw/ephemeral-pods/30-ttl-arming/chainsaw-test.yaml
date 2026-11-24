@@ -1,0 +1,16 @@
+# E16b: in delete mode, the pack's ClusterRole also arms Kyverno's cleanup.kyverno.io/ttl
+# label for Pods. A TTL label set by a permitted principal deletes the Pod.
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: ttl-arming
+spec:
+  timeouts:
+    error: 5m
+  steps:
+    - name: ttl-labeled-pod-is-deleted-by-kyverno-ttl-controller
+      try:
+        - apply:
+            file: pod.yaml
+        - error:
+            file: pod-ref.yaml

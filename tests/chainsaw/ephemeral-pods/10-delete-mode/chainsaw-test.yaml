@@ -1,0 +1,30 @@
+# Delete mode: E2 (expired and default-TTL opted-in Pods are deleted), E3 (protected label and
+# protected namespace kept), E5 (no opt-in kept), E6 (GitOps markers kept), E13 (a malformed
+# expiry created before the guard does not stop cleanup of a valid Pod).
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: delete-mode
+spec:
+  timeouts:
+    error: 4m
+    assert: 1m
+  steps:
+    - name: create-pods
+      try:
+        - apply:
+            file: pods.yaml
+    - name: expired-pods-deleted
+      try:
+        - error:
+            file: deleted.yaml
+        - error:
+            file: pre-deleted.yaml
+    - name: others-kept-after-two-more-runs
+      try:
+        - sleep:
+            duration: 2m10s
+        - assert:
+            file: kept.yaml
+        - assert:
+            file: pre-kept.yaml

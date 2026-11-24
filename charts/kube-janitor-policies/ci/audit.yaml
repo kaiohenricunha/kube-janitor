@@ -1,0 +1,4 @@
+packs:
+  ephemeralPods:
+    enabled: true
+    mode: audit

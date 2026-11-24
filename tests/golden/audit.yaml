@@ -1,0 +1,165 @@
+---
+# Source: kube-janitor-policies/templates/guard/validatingadmissionpolicy.yaml
+# Metadata guard (docs/specs/security-and-testing.md section 4).
+# G-NS   no cleanup metadata may be added or changed in a protected namespace.
+# G-OPT  only a principal allowed to delete the object may add or change
+#        janitor.io/ephemeral, janitor.io/job-retention, cleanup.kyverno.io/ttl, or
+#        janitor.io/expires-at (also its removal while the opt-in stays).
+# G-PROT only a principal allowed to delete the object may remove janitor.io/protected=true.
+# G-FMT  janitor.io/expires-at must be a real UTC date: YYYY-MM-DDTHH:MM:SSZ.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: kube-janitor-metadata-guard
+  labels:
+    app.kubernetes.io/name: kube-janitor-policies
+    app.kubernetes.io/instance: t
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "0.1.0-dev"
+    helm.sh/chart: kube-janitor-policies-0.1.0-dev
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        resources: ["pods"]
+        operations: ["CREATE", "UPDATE"]
+  matchConditions:
+    - name: touches-cleanup-metadata
+      expression: "object.metadata.?labels.orValue({}).exists(k, k.startsWith('janitor.io/') || k == 'cleanup.kyverno.io/ttl') || object.metadata.?annotations.orValue({}).exists(k, k.startsWith('janitor.io/')) || (oldObject != null && (oldObject.metadata.?labels.orValue({}).exists(k, k.startsWith('janitor.io/') || k == 'cleanup.kyverno.io/ttl') || oldObject.metadata.?annotations.orValue({}).exists(k, k.startsWith('janitor.io/'))))"
+  variables:
+    - name: newOptIn
+      expression: "object.metadata.?labels.orValue({})[?'janitor.io/ephemeral'].orValue('')"
+    - name: oldOptIn
+      expression: "oldObject == null ? '' : oldObject.metadata.?labels.orValue({})[?'janitor.io/ephemeral'].orValue('')"
+    - name: newRetention
+      expression: "object.metadata.?labels.orValue({})[?'janitor.io/job-retention'].orValue('')"
+    - name: oldRetention
+      expression: "oldObject == null ? '' : oldObject.metadata.?labels.orValue({})[?'janitor.io/job-retention'].orValue('')"
+    - name: newTTL
+      expression: "object.metadata.?labels.orValue({})[?'cleanup.kyverno.io/ttl'].orValue('')"
+    - name: oldTTL
+      expression: "oldObject == null ? '' : oldObject.metadata.?labels.orValue({})[?'cleanup.kyverno.io/ttl'].orValue('')"
+    - name: newExpiry
+      expression: "object.metadata.?annotations.orValue({})[?'janitor.io/expires-at'].orValue('')"
+    - name: oldExpiry
+      expression: "oldObject == null ? '' : oldObject.metadata.?annotations.orValue({})[?'janitor.io/expires-at'].orValue('')"
+    - name: newProtected
+      expression: "object.metadata.?labels.orValue({})[?'janitor.io/protected'].orValue('')"
+    - name: oldProtected
+      expression: "oldObject == null ? '' : oldObject.metadata.?labels.orValue({})[?'janitor.io/protected'].orValue('')"
+    - name: lifecycleChanged
+      expression: "(variables.newOptIn != '' && variables.newOptIn != variables.oldOptIn) || (variables.newRetention != '' && variables.newRetention != variables.oldRetention) || (variables.newTTL != '' && variables.newTTL != variables.oldTTL) || (variables.newExpiry != '' && variables.newExpiry != variables.oldExpiry) || (variables.newExpiry == '' && variables.oldExpiry != '' && variables.newOptIn != '')"
+    - name: protectionRemoved
+      expression: "variables.oldProtected == 'true' && variables.newProtected != 'true'"
+    - name: targetNamespace
+      expression: "request.resource.resource == 'namespaces' ? object.metadata.name : request.namespace"
+    - name: inProtectedNamespace
+      expression: "variables.targetNamespace in ['kube-system', 'kube-public', 'kube-node-lease', 'default', 'kyverno']"
+    - name: canDelete
+      expression: "authorizer.group(request.resource.group).resource(request.resource.resource).namespace(request.namespace).name(object.metadata.name).check('delete').allowed()"
+    - name: expiryValid
+      expression: "(variables.newExpiry.matches('^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$') && int(variables.newExpiry.substring(8, 10)) <= (int(variables.newExpiry.substring(5, 7)) == 2 ? ((int(variables.newExpiry.substring(0, 4)) % 4 == 0 && (int(variables.newExpiry.substring(0, 4)) % 100 != 0 || int(variables.newExpiry.substring(0, 4)) % 400 == 0)) ? 29 : 28) : (int(variables.newExpiry.substring(5, 7)) in [4, 6, 9, 11] ? 30 : 31)))"
+  validations:
+    - expression: "!(variables.lifecycleChanged && variables.inProtectedNamespace)"
+      messageExpression: "'kube-janitor guard G-NS: cleanup metadata is not allowed in protected namespace ' + variables.targetNamespace"
+      reason: Forbidden
+    - expression: "!variables.lifecycleChanged || variables.canDelete"
+      messageExpression: "'kube-janitor guard G-OPT: only a principal allowed to delete ' + request.resource.resource + '/' + object.metadata.name + ' may set or change its cleanup metadata (janitor.io/ephemeral, janitor.io/expires-at, janitor.io/job-retention, cleanup.kyverno.io/ttl)'"
+      reason: Forbidden
+    - expression: "!variables.protectionRemoved || variables.canDelete"
+      messageExpression: "'kube-janitor guard G-PROT: only a principal allowed to delete ' + request.resource.resource + '/' + object.metadata.name + ' may remove janitor.io/protected=true'"
+      reason: Forbidden
+    - expression: "variables.newExpiry == '' || variables.newExpiry == variables.oldExpiry || variables.expiryValid"
+      messageExpression: "'kube-janitor guard G-FMT: janitor.io/expires-at must be a real UTC date in the form YYYY-MM-DDTHH:MM:SSZ, got ' + variables.newExpiry"
+      reason: Invalid
+---
+# Source: kube-janitor-policies/templates/guard/validatingadmissionpolicybinding.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: kube-janitor-metadata-guard
+  labels:
+    app.kubernetes.io/name: kube-janitor-policies
+    app.kubernetes.io/instance: t
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "0.1.0-dev"
+    helm.sh/chart: kube-janitor-policies-0.1.0-dev
+spec:
+  policyName: kube-janitor-metadata-guard
+  validationActions: ["Deny"]
+---
+# Source: kube-janitor-policies/templates/packs/ephemeral-pods/auditpolicy.yaml
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: kube-janitor-ephemeral-pods-audit
+  labels:
+    app.kubernetes.io/name: kube-janitor-policies
+    app.kubernetes.io/instance: t
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "0.1.0-dev"
+    helm.sh/chart: kube-janitor-policies-0.1.0-dev
+    janitor.io/pack: ephemeral-pods
+  annotations:
+    policies.kyverno.io/description: >-
+      kube-janitor ephemeral-pods in audit mode: reports (fail) every object that the
+      delete-mode policy would delete. Deletes nothing.
+spec:
+  validationActions: [Audit]
+  evaluation:
+    admission:
+      enabled: false
+    background:
+      enabled: true
+  autogen:
+    podControllers:
+      controllers: []
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        resources: ["pods"]
+        operations: ["*"]
+        scope: Namespaced
+    objectSelector:
+      matchLabels:
+        janitor.io/ephemeral: "true"
+      matchExpressions:
+        - key: janitor.io/protected
+          operator: NotIn
+          values: ["true"]
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
+            - kube-public
+            - kube-node-lease
+            - default
+            - kyverno
+        - key: janitor.io/protected
+          operator: NotIn
+          values: ["true"]
+  variables:
+    - expression: object.metadata.?labels.orValue({})
+      name: labels
+    - expression: object.metadata.?annotations.orValue({})
+      name: annotations
+    - expression: variables.annotations[?'janitor.io/expires-at'].orValue('')
+      name: rawExpiry
+    - expression: '(variables.rawExpiry.matches(''^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$'')
+        && int(variables.rawExpiry.substring(8, 10)) <= (int(variables.rawExpiry.substring(5,
+        7)) == 2 ? ((int(variables.rawExpiry.substring(0, 4)) % 4 == 0 && (int(variables.rawExpiry.substring(0,
+        4)) % 100 != 0 || int(variables.rawExpiry.substring(0, 4)) % 400 == 0)) ? 29 :
+        28) : (int(variables.rawExpiry.substring(5, 7)) in [4, 6, 9, 11] ? 30 : 31)))'
+      name: expiryValid
+    - expression: 'variables.rawExpiry == '''' ? timestamp(object.metadata.creationTimestamp)
+        + duration(''24h'') : (variables.expiryValid ? timestamp(variables.rawExpiry)
+        : timestamp(''9999-12-31T23:59:59Z''))'
+      name: expiresAt
+  validations:
+    - expression: "!((!has(object.metadata.deletionTimestamp)) && (variables.labels[?'janitor.io/protected'].orValue('') != 'true' && namespaceObject.metadata.?labels.orValue({})[?'janitor.io/protected'].orValue('') != 'true') && (!(object.metadata.namespace in ['kube-system', 'kube-public', 'kube-node-lease', 'default', 'kyverno'])) && (!variables.annotations.exists(k, k == 'argocd.argoproj.io/tracking-id' || k.startsWith('meta.helm.sh/')) && !variables.labels.exists(k, k.startsWith('kustomize.toolkit.fluxcd.io/') || k.startsWith('helm.toolkit.fluxcd.io/') || k == 'app.kubernetes.io/instance' || k == 'argocd.argoproj.io/instance') && variables.labels[?'app.kubernetes.io/managed-by'].orValue('') != 'Helm') && (object.metadata.?ownerReferences.orValue([]).size() == 0) && (time.now() > variables.expiresAt))"
+      messageExpression: "'would be deleted by kube-janitor ephemeral-pods (expired at ' + string(variables.expiresAt) + ')'"

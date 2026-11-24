@@ -1,0 +1,42 @@
+# E12: helm uninstall deletes no user object, removes every chart object, and takes away the
+# cleanup controller's Pod delete permission.
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: after-uninstall
+spec:
+  timeouts:
+    exec: 3m
+    assert: 1m
+    error: 1m
+  steps:
+    - name: create-user-pods
+      try:
+        - apply:
+            file: pods.yaml
+    - name: uninstall
+      try:
+        - script:
+            content: helm uninstall kjp -n kube-janitor --wait
+            check:
+              ($error): ~
+    - name: user-objects-intact-chart-objects-gone
+      try:
+        - assert:
+            file: pods-ref.yaml
+        - error:
+            file: gone-0.yaml
+        - error:
+            file: gone-1.yaml
+        - error:
+            file: gone-2.yaml
+        - error:
+            file: gone-3.yaml
+        - script:
+            content: |
+              kubectl create -o jsonpath='{.status.allowed}' -f - <<EOF
+              {"apiVersion":"authorization.k8s.io/v1","kind":"SubjectAccessReview","spec":{"user":"system:serviceaccount:kyverno:kyverno-cleanup-controller","groups":["system:serviceaccounts","system:serviceaccounts:kyverno","system:authenticated"],"resourceAttributes":{"resource":"pods","verb":"delete"}}}
+              EOF
+            check:
+              ($error): ~
+              ($stdout): 'false'

@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: m-expired
+  labels:
+    janitor.io/ephemeral: 'true'
+  annotations:
+    janitor.io/expires-at: '2000-01-01T00:00:00Z'
+spec:
+  terminationGracePeriodSeconds: 0
+  containers:
+  - name: pause
+    image: registry.k8s.io/pause:3.10
+    imagePullPolicy: IfNotPresent
