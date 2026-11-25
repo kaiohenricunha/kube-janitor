@@ -138,3 +138,15 @@ metadata:
   labels:
     kubernetes.io/metadata.name: n16-default-ttl-new
     janitor.io/ephemeral: 'true'
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: n05b-protected-annotation
+  creationTimestamp: '2000-01-01T00:00:00Z'
+  labels:
+    kubernetes.io/metadata.name: n05b-protected-annotation
+    janitor.io/ephemeral: 'true'
+  annotations:
+    janitor.io/expires-at: '2000-01-01T00:00:00Z'
+    janitor.io/protected: 'true'

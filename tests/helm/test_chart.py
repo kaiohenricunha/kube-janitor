@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Helm render tests H1-H11 for charts/kube-janitor-policies.
+"""Helm render tests H1-H23 for charts/kube-janitor-policies.
 
 See docs/specs/security-and-testing.md section 6.2. Needs `helm` on PATH and PyYAML.
 Run: python3 tests/helm/test_chart.py            (all tests)
@@ -197,6 +197,101 @@ def test_h16_examples_parse():
     assert files, "examples/ is empty"
     for f in files:
         list(yaml.safe_load_all(f.read_text()))
+
+
+def guard_gvrs(docs):
+    vap = [v for v in kinds(docs, "ValidatingAdmissionPolicy") if v["metadata"]["name"] == "kube-janitor-metadata-guard"][0]
+    return {(r["apiGroups"][0], r["resources"][0]) for r in vap["spec"]["matchConstraints"]["resourceRules"]}
+
+
+def test_h19_guard_covers_namespaces_for_every_namespaced_pack():
+    # A Namespace's janitor.io/protected label protects every object in it, so removing it
+    # must pass G-PROT whenever a namespaced pack is enabled (invariant S4).
+    for key, gvr in (("ephemeralPods", ("", "pods")), ("temporaryConfigMaps", ("", "configmaps")),
+                     ("completedJobsRetention", ("batch", "jobs"))):
+        for mode in ("audit", "delete"):
+            covered = guard_gvrs(render(sets=[f"packs.{key}.enabled=true", f"packs.{key}.mode={mode}"]))
+            assert covered == {gvr, ("", "namespaces")}, f"{key}/{mode}: {covered}"
+
+
+def test_h20_umbrella_chart_with_parent_globals():
+    # Helm copies the parent's global values into every subchart; the schema must accept them.
+    import shutil
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        parent = pathlib.Path(tmp) / "parent"
+        (parent / "charts").mkdir(parents=True)
+        shutil.copytree(CHART, parent / "charts" / "kube-janitor-policies")
+        (parent / "Chart.yaml").write_text("apiVersion: v2\nname: parent\nversion: 0.1.0\n")
+        (parent / "values.yaml").write_text(
+            "global:\n  imageRegistry: registry.example.com\n"
+            "kube-janitor-policies:\n  packs:\n    ephemeralPods:\n      enabled: true\n")
+        r = subprocess.run(["helm", "template", "p", str(parent), *API], capture_output=True, text=True)
+        assert r.returncode == 0, f"umbrella render failed: {r.stderr.strip()}"
+        names = {d["metadata"]["name"] for d in yaml.safe_load_all(r.stdout) if d}
+        assert "kube-janitor-ephemeral-pods-audit" in names, names
+    # The chart's own global keys are still validated, and misspelled safety keys are refused:
+    # a silently ignored extraProtectedNamespace would leave that namespace unprotected.
+    schema = "don't meet the specifications of the schema"
+    render_fails(sets=["global.kyvernoNamespace=Bad_Name"], expect=schema)
+    for typo in ("global.extraProtectedNamespace={payments}", "global.protectedNamespaces={payments}",
+                 "global.kyvernoNameSpace=kyverno-system", "global.Schedule=*/5 * * * *",
+                 "global.deletionPropagation=Foreground"):
+        render_fails(sets=[typo], expect=schema)
+    for other in ("global.imageRegistry=r", "global.storageClass=s", "global.imagePullSecrets={a}"):
+        render(sets=[other])
+
+
+def test_h21_prometheus_rule_extra_labels():
+    sets = ["monitoring.prometheusRule.enabled=true", "monitoring.prometheusRule.labels.release=kps"]
+    rule = kinds(render(values=[CHART / "ci" / "delete.yaml"], sets=sets), "PrometheusRule")[0]
+    labels = rule["metadata"]["labels"]
+    assert labels.get("release") == "kps", labels
+    assert labels.get("app.kubernetes.io/name") == "kube-janitor-policies", "common labels must stay"
+    render_fails(extra=["--set-json", 'monitoring.prometheusRule.labels={"release":1}'],
+                 expect="don't meet the specifications of the schema")
+
+
+def test_h22_durations_are_bounded():
+    # Larger values overflow Go's duration (about 2562047h) and the policy fails to compile.
+    schema = "don't meet the specifications of the schema"
+    for bad in ("packs.ephemeralPods.defaultTTL=1000000h", "packs.ephemeralPods.defaultTTL=100000000m",
+                "packs.completedJobsRetention.retention=1000000h"):
+        render_fails(sets=[bad], expect=schema)
+    for good in ("packs.ephemeralPods.defaultTTL=999999h", "packs.ephemeralPods.defaultTTL=99999999m",
+                 "packs.completedJobsRetention.retention=999999h"):
+        render(sets=[good])
+
+
+def render_notes(sets):
+    # NOTES.txt is not printed by `helm template`; render it through tpl in a scratch copy.
+    import shutil
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        chart = pathlib.Path(tmp) / "kube-janitor-policies"
+        shutil.copytree(CHART, chart)
+        shutil.copy(chart / "templates" / "NOTES.txt", chart / "notes-src.txt")
+        (chart / "templates" / "notes-render.yaml").write_text(
+            'apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: notes\ndata:\n  notes: |\n'
+            '{{ tpl (.Files.Get "notes-src.txt") . | indent 4 }}\n')
+        args = ["helm", "template", "t", str(chart), "--namespace", "kube-janitor", *API,
+                "--show-only", "templates/notes-render.yaml"]
+        for s in sets:
+            args += ["--set", s]
+        r = subprocess.run(args, capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+        return yaml.safe_load(r.stdout)["data"]["notes"]
+
+
+def test_h23_notes_match_the_release():
+    jobs = render_notes(["packs.completedJobsRetention.enabled=true", "packs.completedJobsRetention.mode=delete"])
+    assert "finished standalone jobs" in jobs, jobs
+    assert "expired opted-in" not in jobs, "the Jobs pack has no object opt-in or expiry"
+    warn = render_notes(["packs.ephemeralPods.enabled=true", "metadataGuard.validationActions={Warn}"])
+    assert "rejects cleanup labels" not in warn, "a Warn-only guard does not reject anything"
+    assert "only warns" in warn, warn
+    deny = render_notes(["packs.ephemeralPods.enabled=true"])
+    assert "rejects cleanup labels in protected namespaces" in deny, deny
 
 
 def golden_pairs():

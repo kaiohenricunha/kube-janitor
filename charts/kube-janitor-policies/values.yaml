@@ -20,7 +20,8 @@ packs:
     enabled: false
     # -- audit | delete
     mode: audit
-    # -- Lifetime when janitor.io/expires-at is absent, from creationTimestamp. Go duration (h or m).
+    # -- Lifetime when janitor.io/expires-at is absent, from creationTimestamp. Go duration (h or m),
+    # at most 999999h or 99999999m.
     defaultTTL: 24h
     # -- Cron schedule; empty uses global.schedule.
     schedule: ""
@@ -62,3 +63,6 @@ monitoring:
     # -- Render a PrometheusRule with deletion alerts (needs the Prometheus Operator CRD).
     # Rendered only while a pack is in delete mode.
     enabled: false
+    # -- Extra labels on the PrometheusRule. kube-prometheus-stack loads only rules that match its
+    # ruleSelector, by default the label release=<its release name>.
+    labels: {}

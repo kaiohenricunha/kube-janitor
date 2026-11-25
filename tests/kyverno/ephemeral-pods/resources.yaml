@@ -331,3 +331,49 @@ spec:
   containers:
   - name: c
     image: busybox
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: k12i-year0000
+  namespace: team-a
+  creationTimestamp: '2000-01-01T00:00:00Z'
+  labels:
+    janitor.io/ephemeral: 'true'
+  annotations:
+    janitor.io/expires-at: '0000-01-01T00:00:00Z'
+spec:
+  containers:
+  - name: c
+    image: busybox
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: k05b-protected-annotation
+  namespace: team-a
+  creationTimestamp: '2000-01-01T00:00:00Z'
+  labels:
+    janitor.io/ephemeral: 'true'
+  annotations:
+    janitor.io/expires-at: '2000-01-01T00:00:00Z'
+    janitor.io/protected: 'true'
+spec:
+  containers:
+  - name: c
+    image: busybox
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: k06b-protected-annotation-ns
+  namespace: prot-ann-ns
+  creationTimestamp: '2000-01-01T00:00:00Z'
+  labels:
+    janitor.io/ephemeral: 'true'
+  annotations:
+    janitor.io/expires-at: '2000-01-01T00:00:00Z'
+spec:
+  containers:
+  - name: c
+    image: busybox

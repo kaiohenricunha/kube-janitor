@@ -22,3 +22,11 @@ namespaces:
     labels:
       kubernetes.io/metadata.name: prot-ns
       janitor.io/protected: 'true'
+- apiVersion: v1
+  kind: Namespace
+  metadata:
+    name: prot-ann-ns
+    labels:
+      kubernetes.io/metadata.name: prot-ann-ns
+    annotations:
+      janitor.io/protected: 'true'

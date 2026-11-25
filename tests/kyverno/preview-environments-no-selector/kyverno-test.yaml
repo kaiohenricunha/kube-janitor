@@ -1,0 +1,24 @@
+# Selector-bypass suite: tests/kyverno/run.sh renders the delete policy WITHOUT the opt-in
+# selector line (STRIP in suite.env). The CEL conditions alone must still keep objects that
+# did not opt in. Do not commit policy.yaml.
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: preview-environments-no-selector
+policies:
+- policy.yaml
+resources:
+- ../preview-environments/resources.yaml
+results:
+- isDeletingPolicy: true
+  kind: Namespace
+  policy: kube-janitor-preview-environments
+  resources:
+  - n02-expired
+  result: pass
+- isDeletingPolicy: true
+  kind: Namespace
+  policy: kube-janitor-preview-environments
+  resources:
+  - n01-no-optin
+  result: fail

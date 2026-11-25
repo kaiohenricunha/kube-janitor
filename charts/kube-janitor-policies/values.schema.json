@@ -6,8 +6,8 @@
   "definitions": {
     "duration": {
       "type": "string",
-      "description": "Go duration in whole hours or minutes, at least 1m (for example 24h, 90m).",
-      "pattern": "^[1-9][0-9]*(h|m)$"
+      "description": "Go duration in whole hours or minutes, from 1m to 999999h or 99999999m (for example 24h, 90m). Larger values overflow Go's duration and the policy fails to compile.",
+      "pattern": "^([1-9][0-9]{0,5}h|[1-9][0-9]{0,7}m)$"
     },
     "mode": {
       "type": "string",
@@ -43,7 +43,14 @@
   "properties": {
     "global": {
       "type": "object",
-      "additionalProperties": false,
+      "description": "Other keys are allowed: Helm copies a parent chart's global values into every subchart. A key that looks like one of this chart's safety keys but is not exact (for example extraProtectedNamespace) is refused, so a typo cannot leave a namespace unprotected.",
+      "additionalProperties": true,
+      "propertyNames": {
+        "anyOf": [
+          { "enum": ["kyvernoNamespace", "extraProtectedNamespaces", "schedule", "deletionPropagationPolicy"] },
+          { "not": { "pattern": "[Pp][Rr][Oo][Tt][Ee][Cc][Tt]|[Kk][Yy][Vv][Ee][Rr][Nn][Oo]|[Ss][Cc][Hh][Ee][Dd][Uu][Ll]|[Pp][Rr][Oo][Pp][Aa][Gg][Aa][Tt]|[Dd][Ee][Ll][Ee][Tt][Ii][Oo][Nn]" } }
+        ]
+      },
       "required": ["kyvernoNamespace", "schedule", "deletionPropagationPolicy"],
       "properties": {
         "kyvernoNamespace": { "$ref": "#/definitions/namespaceName" },
@@ -103,7 +110,14 @@
         "prometheusRule": {
           "type": "object",
           "additionalProperties": false,
-          "properties": { "enabled": { "type": "boolean" } }
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "labels": {
+              "type": "object",
+              "description": "Extra labels, for example the release label that a Prometheus Operator ruleSelector requires.",
+              "additionalProperties": { "type": "string" }
+            }
+          }
         }
       }
     }

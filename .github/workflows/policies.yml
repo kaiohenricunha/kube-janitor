@@ -57,7 +57,7 @@ jobs:
         run: python3 -c 'import yaml' 2>/dev/null || python3 -m pip install --user pyyaml
       - name: helm lint
         run: helm lint --strict charts/kube-janitor-policies
-      - name: Render tests H1-H11
+      - name: Render tests H1-H23
         run: python3 tests/helm/test_chart.py
       - name: Shell scripts
         run: shellcheck -S warning hack/*.sh tests/kyverno/run.sh tests/e2e/run.sh tests/gitops/run.sh

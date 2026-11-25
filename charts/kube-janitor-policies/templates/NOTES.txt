@@ -1,9 +1,10 @@
 kube-janitor-policies {{ .Chart.Version }} is installed in namespace {{ .Release.Namespace }}.
+{{- $defs := include "kjp.packDefs" . | fromYaml }}
 {{- $any := false }}
 {{- range $key, $pack := .Values.packs }}
 {{- if $pack.enabled }}
 {{- $any = true }}
-  - {{ $key }}: mode={{ $pack.mode }}{{ if eq $pack.mode "audit" }} (reports only; read: kubectl get policyreports,clusterpolicyreports -A){{ else }} (DELETES expired opted-in objects){{ end }}
+  - {{ $key }}: mode={{ $pack.mode }}{{ if eq $pack.mode "audit" }} (reports only; read: kubectl get policyreports,clusterpolicyreports -A){{ else }} (DELETES {{ include "kjp.packDescription" (dict "def" (index $defs $key) "pack" $pack) }}){{ end }}
 {{- end }}
 {{- end }}
 {{- if not $any }}
@@ -15,7 +16,13 @@ Enable a pack in audit mode first, for example:
 Opt an object in from a namespace that is NOT protected
 ({{ include "kjp.protectedNamespaces" . | fromJsonArray | join ", " }}), for example:
   kubectl run debug-$USER -n <namespace> --image=busybox -l janitor.io/ephemeral=true -- sleep infinity
+{{- if not $any }}
+The metadata guard is rendered when a pack is enabled.
+{{- else if has "Deny" .Values.metadataGuard.validationActions }}
 The metadata guard rejects cleanup labels in protected namespaces (rule G-NS).
+{{- else }}
+The metadata guard only warns or audits (validationActions={{ join "," .Values.metadataGuard.validationActions }}); it rejects nothing.
+{{- end }}
 
 Before you switch a pack to mode=delete, run hack/preflight.sh (checks P1-P8).
 Design and safety model: https://github.com/kaiohenricunha/kube-janitor/blob/main/docs/specs/kyverno-policy-pack.md

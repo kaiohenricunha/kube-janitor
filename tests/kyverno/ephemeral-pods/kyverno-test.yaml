@@ -37,6 +37,9 @@ results:
   - team-a/k13-owned
   - team-a/k14-terminating
   - team-a/k16-default-ttl-new
+  - team-a/k12i-year0000
+  - team-a/k05b-protected-annotation
+  - prot-ann-ns/k06b-protected-annotation-ns
   result: fail
 - isDeletingPolicy: true
   kind: Pod

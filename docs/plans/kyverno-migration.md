@@ -312,6 +312,25 @@ the four specs now cite these rows as R1–R36.
 | R35 | `hack/preview.sh` | Listed in the Phase 2 plan, **not implemented**. Audit mode covers the "what would be deleted" need in-cluster (R11). | — | Mark as planned in `kyverno-policy-pack.md` §7. |
 | R36 | Flux `chart.spec.valuesFiles` | Flux replaces the chart's `values.yaml` with the listed files; with only `ci/e2e.yaml`, the schema rejected the values (`missing properties 'kyvernoNamespace', 'deletionPropagationPolicy'`). Listing `values.yaml` first fixes it. Inline `values:` (the documented example) merge normally. | HelmRelease status on the repro cluster | Note in `gitops-integration.md` §7.2. |
 
+### 6.5 Post-merge review (`/code-review high` of the chart, 2026-11-25)
+
+The run's own reviews of PRs #4–#6 were too shallow (one `low` pass, then none). A `high` review of
+`charts/kube-janitor-policies` after PR #6 found the items below. Each fix was test-first: the new test
+failed on the merged chart and passes after the fix.
+
+| # | Item | Result | Evidence | Spec change |
+|---|------|--------|----------|-------------|
+| R37 | Expiry in year 0000 | `0000-01-01T00:00:00Z` passed the format and calendar check, in the policy and in guard G-FMT. `timestamp()` then failed with `timestamp overflow` (Kyverno CLI v1.20.0): one opted-in object could fail every run of a pack. Fixed: the check requires a year of at least 0001 (CEL's timestamp range is 0001–9999). | K fixture `k12i-year0000` (delete and audit suites); e2e `20-guard` step `year-0000-expiry-denied` | `kyverno-policy-pack.md` §5.3; `security-and-testing.md` G-FMT |
+| R38 | Namespace protection label | With only namespaced packs enabled, the guard did not match Namespaces, so a principal who may update a Namespace could remove its `janitor.io/protected=true` label without G-PROT (invariant S4). Fixed: the guard matches Namespaces whenever a namespaced pack is enabled. All guard rules then apply to Namespaces, so lifecycle keys on a Namespace need delete permission even when `previewEnvironments` is off (deliberate, fail safe). | H19 | `security-and-testing.md` §4 |
+| R39 | Opt-in checked only by selectors | Protection was checked by the selectors and again in CEL; the opt-in only by the selectors. With the opt-in selector line removed, objects that never opted in were deleted (`Want fail, got pass`). Fixed: a CEL condition `opted-in`. | Suites `*-no-selector` for Pods, Namespaces, and Jobs (`tests/kyverno/run.sh` `STRIP`) | `kyverno-policy-pack.md` §6.1, §6.2, §6.3 |
+| R40 | Protection by annotation | The deprecated controller protects with the **annotation** `janitor.io/protected=true` (`internal/classifier/protection_strategy.go:80-81`); the chart read only the label, so such objects were deleted once opted in. Fixed: the annotation protects on the object and on its namespace, and G-PROT guards its removal. Only the default key is honored; a custom `spec.protection.annotationKey` is not. | K fixtures `k05b-protected-annotation`, `k06b-protected-annotation-ns`; e2e step `protection-annotation-removal-without-delete-permission-denied` | `kyverno-policy-pack.md` §5.1, §6.1 |
+| R41 | Chart as a subchart | `global` had `additionalProperties: false`; Helm copies a parent chart's `global` values into every subchart, so the render failed. Fixed: `global` accepts other keys; its own keys are still validated, and a key that looks like a safety key but is not exact (`extraProtectedNamespace`) is refused, so a typo cannot leave a namespace unprotected. | H20 (renders a scratch umbrella chart; typo cases) | `kyverno-policy-pack.md` §8.2 |
+| R42 | Alerts not loaded | The `PrometheusRule` could not carry the `release` label that a default kube-prometheus-stack `ruleSelector` requires. Fixed: `monitoring.prometheusRule.labels`. | H21 | `kyverno-policy-pack.md` §8.1, §9.1 |
+| R43 | Very large TTL | `defaultTTL: 100000000h` passed the schema; the policy then failed to compile (`type conversion error from 'string' to 'google.protobuf.Duration'`). A TTL below Go's limit (about 2562047h) cannot reach year 9999. Fixed: at most `999999h` or `99999999m`. | H22 | `kyverno-policy-pack.md` §8.2 |
+| R44 | Alert scope and NOTES | `kyverno_controller_drop_total` has no policy label, so `KubeJanitorDeletingScheduleDropped` covers every `DeletingPolicy`; its text now says so. NOTES described the Jobs pack wrongly and said the guard rejects labels even when it only warns. | H23 | `kyverno-policy-pack.md` §9.1 |
+
+Rejected: an upper bound on `Chart.yaml` `kubeVersion` (deliberate, [compatibility.md](../specs/compatibility.md) §4.3 layer 1).
+
 ## Appendix A: Audit probe
 
 The probe was saved as `internal/zzaudit/audit_test.go`, run once, and deleted.

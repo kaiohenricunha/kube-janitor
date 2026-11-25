@@ -11,8 +11,10 @@
 # G-OPT  only a principal allowed to delete the object may add or change
 #        janitor.io/ephemeral, janitor.io/job-retention, cleanup.kyverno.io/ttl, or
 #        janitor.io/expires-at (also its removal while the opt-in stays).
-# G-PROT only a principal allowed to delete the object may remove janitor.io/protected=true.
-# G-FMT  janitor.io/expires-at must be a real UTC date: YYYY-MM-DDTHH:MM:SSZ.
+# G-PROT only a principal allowed to delete the object may remove janitor.io/protected=true
+#        (label or annotation). Namespaces are guarded whenever a namespaced pack is enabled,
+#        because a Namespace's protection covers every object in it.
+# G-FMT  janitor.io/expires-at must be a real UTC date: YYYY-MM-DDTHH:MM:SSZ, year 0001-9999.
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicy
 metadata:
@@ -28,7 +30,7 @@ spec:
       {{- if $pack.enabled }}
       {{- $def := index $defs $key }}
       {{- $_ := set $guarded (printf "%s/%s/%s" $def.apiGroup $def.apiVersion $def.resource) true }}
-      {{- if eq $def.selection "namespace" }}
+      {{- if eq $def.scope "Namespaced" }}
       {{- $_ := set $guarded "/v1/namespaces" true }}
       {{- end }}
       {{- end }}
@@ -61,15 +63,15 @@ spec:
     - name: oldExpiry
       expression: {{ printf "oldObject == null ? '' : %s[?'janitor.io/expires-at'].orValue('')" $oldAnn | quote }}
     - name: newProtected
-      expression: {{ printf "%s[?'janitor.io/protected'].orValue('')" $lbl | quote }}
+      expression: {{ printf "%s[?'janitor.io/protected'].orValue('') == 'true' || %s[?'janitor.io/protected'].orValue('') == 'true'" $lbl $ann | quote }}
     - name: oldProtected
-      expression: {{ printf "oldObject == null ? '' : %s[?'janitor.io/protected'].orValue('')" $oldLbl | quote }}
+      expression: {{ printf "oldObject != null && (%s[?'janitor.io/protected'].orValue('') == 'true' || %s[?'janitor.io/protected'].orValue('') == 'true')" $oldLbl $oldAnn | quote }}
     - name: lifecycleChanged
       expression: "(variables.newOptIn != '' && variables.newOptIn != variables.oldOptIn) || (variables.newTTL != '' && variables.newTTL != variables.oldTTL) || (variables.newExpiry != '' && variables.newExpiry != variables.oldExpiry) || (variables.newExpiry == '' && variables.oldExpiry != '' && variables.newOptIn != '')"
     - name: retentionChanged
       expression: "variables.newRetention != '' && variables.newRetention != variables.oldRetention"
     - name: protectionRemoved
-      expression: "variables.oldProtected == 'true' && variables.newProtected != 'true'"
+      expression: "variables.oldProtected && !variables.newProtected"
     - name: targetNamespace
       expression: "request.resource.resource == 'namespaces' ? object.metadata.name : request.namespace"
     - name: inProtectedNamespace
@@ -91,7 +93,7 @@ spec:
       messageExpression: "'kube-janitor guard G-OPT: only a principal allowed to delete Jobs in namespace ' + variables.targetNamespace + ' may set or change janitor.io/job-retention'"
       reason: Forbidden
     - expression: "!variables.protectionRemoved || variables.canDelete"
-      messageExpression: "'kube-janitor guard G-PROT: only a principal allowed to delete ' + request.resource.resource + '/' + object.metadata.name + ' may remove janitor.io/protected=true'"
+      messageExpression: "'kube-janitor guard G-PROT: only a principal allowed to delete ' + request.resource.resource + '/' + object.metadata.name + ' may remove janitor.io/protected=true (label or annotation)'"
       reason: Forbidden
     - expression: "variables.newExpiry == '' || variables.newExpiry == variables.oldExpiry || variables.expiryValid"
       messageExpression: "'kube-janitor guard G-FMT: janitor.io/expires-at must be a real UTC date in the form YYYY-MM-DDTHH:MM:SSZ, got ' + variables.newExpiry"
