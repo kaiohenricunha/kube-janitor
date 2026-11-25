@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # Build stage
-FROM golang:1.26-alpine AS builder
+FROM golang:1.26.11-alpine AS builder
 ARG VERSION=dev
 ARG TARGETOS=linux
 ARG TARGETARCH=amd64
