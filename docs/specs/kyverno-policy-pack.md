@@ -1,6 +1,6 @@
 # Spec: kube-janitor-policies — Kyverno-native cleanup policy pack
 
-**Status**: Draft
+**Status**: Implemented in kube-janitor-policies 0.1.0 (results: [kyverno-migration.md](../plans/kyverno-migration.md) §6)
 **Date**: 2026-11-24
 **Phase**: migration Phases 1–3 (see [kyverno-migration.md](../plans/kyverno-migration.md))
 **Decision record**: [ADR-0002](../adr/0002-kyverno-native-cleanup.md)
@@ -115,7 +115,7 @@ packs use cluster-scoped `DeletingPolicy` and restrict namespaces with `namespac
 |------|---------------|
 | Required metadata | Label `janitor.io/ephemeral: "true"` on the Namespace. Optional annotation `janitor.io/expires-at`. |
 | Detection | Expiry passed (section 5.3). Namespace not `Terminating`. No GitOps or Helm marker on the Namespace object. Name not in the protected list. Label `janitor.io/protected` not `true`. |
-| Cleanup ownership | The CI system that created the namespace. It sets the opt-in label at creation. On PR close it sets `janitor.io/expires-at` to now plus a grace period (pattern in [gitops-integration.md](gitops-integration.md) section 5). |
+| Cleanup ownership | The CI system that created the namespace. It sets the opt-in label at creation. On PR close it sets `janitor.io/expires-at` to now plus a grace period (pattern in [gitops-integration.md](gitops-integration.md) section 5). The labeling identity must be allowed to delete the namespace (R27, R28). |
 | RBAC added | `namespaces`: get, list, watch, delete. |
 | Default | Disabled. When enabled: `mode: audit`. |
 | GitOps | A GitOps-managed preview is removed by its GitOps tool. The pack is a backstop for namespaces that the GitOps tool leaves behind. See [gitops-integration.md](gitops-integration.md). |
@@ -135,7 +135,8 @@ packs use cluster-scoped `DeletingPolicy` and restrict namespaces with `namespac
 | Blast radius | One Pod per false positive. |
 | Release | v0.1 |
 
-Usage example: `kubectl run debug-$USER --image=busybox -l janitor.io/ephemeral=true -- sleep infinity`.
+Usage example: `kubectl run debug-$USER -n <namespace> --image=busybox -l janitor.io/ephemeral=true -- sleep infinity`.
+Use a namespace that is not protected: the metadata guard rejects cleanup labels in `default` and the other protected namespaces (rule G-NS), and its message lists them **[local]** (R24).
 
 #### temporaryConfigMaps
 
@@ -154,7 +155,7 @@ Usage example: `kubectl run debug-$USER --image=busybox -l janitor.io/ephemeral=
 | Item | Specification |
 |------|---------------|
 | Required metadata | Namespace label `janitor.io/job-retention: "enabled"`. No label on the Job. |
-| Detection | Condition `Complete=True` or `Failed=True`. `status.completionTime` (or the condition `lastTransitionTime` for failed Jobs) is older than `retention`. No `ownerReferences` (CronJob-owned Jobs are left to `successfulJobsHistoryLimit`/`failedJobsHistoryLimit`, defaults 3 and 1 **[upstream]**). `spec.ttlSecondsAfterFinished` unset (native TTL already handles those Jobs). No manager marker. |
+| Detection | A `Complete=True` or `Failed=True` condition; its `lastTransitionTime` plus `retention` is in the past (`Suspended` or running Jobs are not finished) **[local]** (R21). No `ownerReferences` (CronJob-owned Jobs are left to `successfulJobsHistoryLimit`/`failedJobsHistoryLimit`, defaults 3 and 1 **[upstream]**). `spec.ttlSecondsAfterFinished` unset (native TTL already handles those Jobs). No manager marker. |
 | Native alternative | Prefer `ttlSecondsAfterFinished` in the Job spec (GA since 1.23 **[upstream]**). The pack covers Jobs that lack it. |
 | RBAC added | `jobs.batch`: get, list, watch, delete. Propagation: `Background` so Pods are removed. |
 | Default | Disabled; `mode: audit` when enabled. |
@@ -223,9 +224,12 @@ expired   = time.now() > expiresAt
 
 - A present but malformed annotation yields `FAR_FUTURE` (keep). It never falls back to the default TTL.
   This is principle P3.
-- `valid` is a strict regular expression check **before** `timestamp()` is called. A `timestamp()`
-  error on one object can fail the whole policy run, and after 10 failed retries the schedule stops
-  **[upstream]** (Kyverno issue #18248). The metadata guard also rejects malformed values at admission.
+- `valid` is a strict format check **plus a calendar check** (month length, leap years) with CEL
+  `substring` and `int()`, **before** `timestamp()` is called. A regular expression alone is not enough:
+  `2026-02-30T00:00:00Z` matches it, and `timestamp()` then fails with `type conversion error`
+  **[local]** (R5). A `timestamp()` error on one object can fail the whole policy run, and after
+  10 failed retries the schedule stops **[upstream]** (Kyverno issue #18248). The metadata guard
+  rejects malformed values at admission with the same check.
 - Precision is one schedule interval (default 10 minutes).
 
 ### 5.4 Kyverno `cleanup.kyverno.io/ttl` versus `DeletingPolicy`
@@ -234,9 +238,10 @@ expired   = time.now() > expiresAt
 |----------|--------------------------------|------------------------|
 | Who decides to delete | Any principal who can set a label on the object | Platform team (policy in Git) **and** an authorized opt-in on the object |
 | Scope | Every kind for which the cleanup controller has cluster-wide list, watch, and delete, in every namespace **[upstream, source]** | Explicit kinds, namespace selector, CEL conditions |
-| Honors Kyverno `resourceFilters` | No **[upstream, inferred from source]** | Yes, since 1.20 **[upstream]** |
+| Honors Kyverno `resourceFilters` | No **[local]**: a TTL-labeled Pod in `kube-public` was deleted (R16) | Yes, since 1.20 **[upstream]** |
 | Time base for durations | Code: `creationTimestamp + duration`. Docs: "from when the label was observed". **Conflict** **[upstream]** | Absolute timestamp, or `creationTimestamp + defaultTTL` (stated) |
 | Precision | Per-object timer | Schedule interval |
+| Armed when | Up to one `ttlReconciliationInterval` (1m) after delete RBAC appears; disarmed up to one interval after it is removed **[local]** (R26) | When the `DeletingPolicy` exists |
 | Delete preconditions | UID and resourceVersion (1.20) **[upstream]** | None (Kyverno issue #18160) **[upstream]** |
 | Events on deletion | None **[upstream, inferred]** | Only with `generateSuccessEvents: true` **[upstream]** |
 | Central review | No | Yes |
@@ -260,10 +265,11 @@ The pack reads metadata from the live object at each run, so the last value befo
 
 ### 5.6 Side effect on the TTL label
 
- Granting the cleanup controller cluster-wide delete on a
-kind also arms the TTL label for that kind in every namespace, including namespaces that
-`resourceFilters` would exclude. The metadata guard therefore covers `cleanup.kyverno.io/ttl` with the
-same rules as `janitor.io/expires-at` (see [security-and-testing.md](security-and-testing.md) section 4).
+Granting the cleanup controller cluster-wide delete on a kind also arms the TTL label for that kind in
+every namespace, including namespaces that `resourceFilters` would exclude (confirmed **[local]**, R16).
+The metadata guard therefore covers `cleanup.kyverno.io/ttl` with the same rules as `janitor.io/expires-at`
+(see [security-and-testing.md](security-and-testing.md) section 4), and preflight check P8 finds such labels
+that predate the guard.
 
 ## 6. Policy construction
 
@@ -277,8 +283,8 @@ Every `DeletingPolicy` in the pack renders these conditions from template helper
 | 2 | `not-protected` | `object.metadata.?labels[?'janitor.io/protected'].orValue('') != 'true'` and the same on `namespaceObject` | Veto. Also enforced in the selectors. |
 | 3 | `not-protected-namespace` | namespace name (or the Namespace's own name) not in the protected list | Kyverno's default `resourceFilters` cover `kube-system`, `kube-public`, `kube-node-lease`, `kyverno`, but not `default` **[local]**. |
 | 4 | `no-known-manager` | no Argo CD, Flux, or Helm marker (see [gitops-integration.md](gitops-integration.md) section 3) | GitOps and Helm resources are removed through their source of truth. |
-| 5 | pack-specific | for example `standalone`, `finished` | Section 4.2. |
-| 6 | `expired` | `time.now() > variables.expiresAt` | Section 5.3. |
+| 5 | pack-specific | `standalone` (namespaced packs); for Jobs also `no-native-ttl` and `finished` | Section 4.2. |
+| 6 | `expired` (or `retention-elapsed` for Jobs) | `time.now() > variables.expiresAt` (Jobs: `time.now() > finishedAt + duration(retention)`) | Section 5.3; R21. |
 
 The protected namespace list is built into the chart and cannot be shortened through values:
 `kube-system`, `kube-public`, `kube-node-lease`, `default`, and the namespace that Kyverno runs in
@@ -288,19 +294,17 @@ The protected namespace list is built into the chart and cannot be shortened thr
 
 - `matchConstraints.resourceRules` names the group, version, and resource explicitly. Wildcards are not expanded by the deleting controller **[upstream]** (issue #18376).
 - `operations: ["*"]` on every rule. The pack does **not** use `excludeResourceRules`, because they are ignored unless their operations include `CREATE` or `*` **[upstream]** (issue #17884). All exclusions are CEL conditions.
-- `objectSelector` carries the opt-in label and `janitor.io/protected NotIn ["true"]`, so the cleanup controller filters on the API server **[upstream]** and evaluates CEL only on opted-in objects.
+- `objectSelector` carries the opt-in label and `janitor.io/protected NotIn ["true"]`, so the cleanup controller filters on the API server **[upstream]** and evaluates CEL only on opted-in objects. The Jobs pack has no object opt-in; its `namespaceSelector` requires `janitor.io/job-retention=enabled`.
 - `namespaceSelector` excludes the protected list by `kubernetes.io/metadata.name` and excludes namespaces labeled `janitor.io/protected=true`.
 
 ### 6.3 Illustrative policy
 
 The following manifest shows the intended shape for `ephemeralPods` in `delete` mode with default values.
 It is based on the upstream example in https://kyverno.io/docs/policy-types/deleting-policy/ .
-**Validation status.** [local] The manifest passes the `v1` OpenAPI schema of
-`deletingpolicies.policies.kyverno.io` from the rendered Kyverno 3.10.0 chart (Python `jsonschema`,
-unknown fields treated as errors): 0 errors. This checks structure only. The CEL was **not** compiled:
-the Kyverno CLI is not installed on the authoring machine, and the session's permission policy did not
-allow downloading it. The first implementation milestone must validate it with `kyverno test`
-(see [security-and-testing.md](security-and-testing.md)).
+**Validation status.** [local] The selectors and conditions match what the chart renders
+(`templates/_conditions.tpl`); labels, annotations, and the expiry variable are simplified here (the chart
+uses the calendar check of §5.3). It is compiled and tested by `kyverno test` (Kyverno CLI v1.20.0,
+`tests/kyverno/`) and by the end-to-end suite on Kubernetes 1.34–1.37 (`tests/e2e/run.sh`).
 
 For the `previewEnvironments` pack (kind `Namespace`), the shared conditions change as follows:
 `not-protected` reads only `object` (there is no enclosing namespace), `not-protected-namespace` tests
@@ -376,15 +380,15 @@ spec:
       expression: "time.now() > variables.expiresAt"
 ```
 
-Points the first milestone must confirm with `kyverno test` and an end-to-end test **[to-test]**:
+Results of the former **[to-test]** items (details: [kyverno-migration.md](../plans/kyverno-migration.md) §6.2):
 
-1. The CEL optional syntax (`.?labels`, `[?'key']`, `orValue`) is accepted by the Kyverno 1.20 compiler.
-2. `namespaceObject` is populated for a cluster-scoped `DeletingPolicy` matching namespaced kinds.
-3. `timestamp(object.metadata.creationTimestamp)` parses the unstructured string value.
-4. The regular expression guard prevents a run failure for a malformed annotation (test with `2026-13-45T99:99:99Z` and `garbage`).
-5. Day-of-month overflow such as `2026-02-30T00:00:00Z` passes the regex. Determine whether `timestamp()` then errors. If it errors, the guard at admission must catch it, and pre-existing objects remain a residual risk.
-6. For kind `Namespace`: whether `namespaceObject` is null, and whether a reference to it errors. An evaluation error can stall the schedule (#18248), so the Namespace variant must not reference `namespaceObject` until this is known.
-7. Whether a cluster-scoped policy with `namespaceSelector` evaluates the selector before CEL, so that the CEL `not-protected-namespace` condition is only a second layer.
+1. The CEL optional syntax (`.?labels`, `[?'key']`, `orValue`) compiles and works **[local]** (R1).
+2. `namespaceObject` is populated for namespaced kinds **[local]** (R2).
+3. `timestamp(object.metadata.creationTimestamp)` parses the unstructured string **[local]** (R3).
+4. The format check prevents run failures for `garbage` and `2026-13-45T99:99:99Z` **[local]** (R4).
+5. `2026-02-30T00:00:00Z` passes a regular expression and makes `timestamp()` fail; the chart adds a calendar check **[local]** (R5).
+6. The Namespace variant never references `namespaceObject` (R20). Its behavior for kind `Namespace` is still untested; nothing depends on it.
+7. Selector exclusions are applied before CEL (the CLI reports them as `skip`), so the CEL `not-protected-namespace` condition is a second layer **[local]** (R7).
 
 ### 6.4 What v0.1 deliberately does not use
 
@@ -407,14 +411,17 @@ hard-codes `dryRun=false`). The pack builds its own non-destructive mode.
 | `audit` (default when a pack is enabled) | One `ValidatingPolicy` per pack with `validationActions: [Audit]` and background evaluation enabled. Its `matchConstraints` and CEL are rendered from the same helpers as the delete policy. A resource that the delete policy would delete produces a **fail** result. **No** `DeletingPolicy` and **no** delete RBAC. | `PolicyReport` / `ClusterPolicyReport` entries: "would be deleted by kube-janitor &lt;pack&gt; (expired at &lt;time&gt;)". | Kyverno reports controller (enabled by default **[local]**). Freshness: background scan interval, default `1h` **[local]**. |
 | `delete` | `DeletingPolicy` and the pack's aggregated ClusterRole. | Deletes matching objects on schedule. | Cleanup controller. |
 
-**[to-test]** before v0.1: that a `ValidatingPolicy` background scan evaluates Namespaces, Pods,
-ConfigMaps, and Jobs with `time.now()` and `namespaceObject`, and that audit and delete give the same
-verdict for the same fixture set (an equivalence test; see [security-and-testing.md](security-and-testing.md) section 6).
+**Results [local]:** the audit `ValidatingPolicy` compiles with `time.now()` and `namespaceObject`, and gives
+the same verdicts as the delete policy for every fixture (A1, defined on verdicts; R8, R19). In-cluster, its
+background scan writes a `PolicyReport` / `ClusterPolicyReport` `fail` result for a would-delete object (R11).
+The chart sets `autogen.podControllers.controllers: []`, so no Deployment or StatefulSet rules are generated
+from a Pod policy (R9).
 
-A second preview path needs no in-cluster component: `hack/preview.sh` exports the candidate objects
-with `kubectl get -l janitor.io/ephemeral=true -o yaml` and runs `kyverno apply --explain` with the
-rendered delete-mode policies. **[upstream]** "For a `DeletingPolicy`, `PASS` means the resource would be
-deleted and `FAIL` that it is kept." The `--explain` flag is alpha in 1.20.
+A second preview path, planned but **not implemented in 0.1.0** (R35), needs no in-cluster component:
+`hack/preview.sh` would export the candidate objects with `kubectl get -l janitor.io/ephemeral=true -o yaml`
+and run `kyverno apply --explain` with the rendered delete-mode policies. **[upstream]** "For a
+`DeletingPolicy`, `PASS` means the resource would be deleted and `FAIL` that it is kept." The `--explain`
+flag is alpha in 1.20.
 
 ## 8. Configuration API (Helm values)
 
@@ -453,8 +460,7 @@ metadataGuard:
 
 preflight:
   helmTest:
-    enabled: false
-    image: registry.k8s.io/kubectl@sha256:<pinned>   # digest pinned at release time
+    enabled: false                   # not implemented in 0.1.0: enabling it fails the render (R25)
 
 monitoring:
   prometheusRule:
@@ -469,6 +475,13 @@ monitoring:
 - `schedule`: a non-empty string. Kyverno rejects invalid cron at admission **[upstream]**.
 - `metadataGuard.validationActions` must include `Deny` whenever any pack has `mode: delete`.
   The chart enforces this with a template `fail`, because JSON Schema cannot express it cleanly.
+  `Deny` and `Warn` together are also refused (Kubernetes rejects that binding).
+- Enabling a feature that has no templates yet fails the render instead of rendering nothing
+  (R15, R25). `helm lint` does not run template `fail` calls, so `helm template` tests are the
+  real gate tests (R12).
+- The schema requires `global.kyvernoNamespace`, `global.schedule`, and `global.deletionPropagationPolicy`.
+  Tools that replace the chart's `values.yaml` instead of merging over it (Flux `chart.spec.valuesFiles`)
+  must list `values.yaml` first **[local]** (R36).
 
 ### 8.3 Deliberately absent knobs
 
@@ -493,11 +506,11 @@ helm upgrade kube-janitor-policies \
   --namespace kube-janitor --reuse-values --set packs.ephemeralPods.enabled=true
 kubectl get policyreports -A -o wide
 
-# 3. Switch to delete mode after review.
+# 3. Switch to delete mode after review (run hack/preflight.sh --kinds pods first).
 helm upgrade ... --reuse-values --set packs.ephemeralPods.mode=delete
 ```
 
-The OCI location above is **proposed**. Nothing is published there yet.
+The OCI location above is **proposed**. Nothing is published there until the first release tag.
 GitOps installation examples are in [gitops-integration.md](gitops-integration.md) section 7.
 
 ## 8A. Packaging, distribution, and lifecycle
@@ -506,36 +519,42 @@ GitOps installation examples are in [gitops-integration.md](gitops-integration.m
 
 ```text
 charts/
-  kube-janitor/                     # existing controller chart: deprecated, unchanged
-  kube-janitor-policies/            # new primary product
+  kube-janitor/                     # deprecated controller chart (deprecated: true)
+  kube-janitor-policies/            # primary product
     Chart.yaml                      # apiVersion v2, kubeVersion ">=1.34.0-0", no dependencies
     values.yaml
     values.schema.json
-    README.md                       # generated from values comments
+    CHANGELOG.md                    # release notes; BREAKING-SAFETY entries
+    artifacthub-repo.yml            # Artifact Hub repository metadata (pushed by the release workflow)
     templates/
-      _helpers.tpl                  # names, labels
-      _conditions.tpl               # shared CEL: protected list, manager markers, expiry
+      _helpers.tpl                  # names, labels, pack registry, protected list
+      _conditions.tpl               # shared CEL: protected list, manager markers, expiry, Jobs
       _gate.tpl                     # render-time API gate (compatibility.md 4.3 layer 1)
       packs/<pack>/deletingpolicy.yaml
       packs/<pack>/auditpolicy.yaml
       packs/<pack>/clusterrole.yaml
       guard/validatingadmissionpolicy.yaml
       guard/validatingadmissionpolicybinding.yaml
-      tests/preflight-pod.yaml      # helm test hook, opt-in
+      guard/mixed-ownership.yaml    # G-MIX policy and binding
       prometheusrule.yaml           # opt-in
-      NOTES.txt                     # mode summary, deprecation warnings
+      NOTES.txt                     # mode summary, protected namespaces, preflight hint
     ci/                             # values files used by chart tests
 tests/
   versions.env                      # all pinned versions, one place
   golden/                           # rendered manifests per ci/ values file, checked for drift
-  kyverno/<pack>/                   # kyverno test suites (policy + resources + kyverno-test.yaml)
-  chainsaw/<scenario>/              # end-to-end tests
+  helm/test_chart.py                # Helm render tests H1-H18
+  kyverno/<pack>{,-audit}/          # kyverno test suites; run.sh renders each policy with --show-only
+  chainsaw/packs/<NN-scenario>/     # end-to-end scenarios, driven in order by tests/e2e/run.sh
+  gitops/                           # Argo CD and Flux scenarios (tests/gitops/run.sh, nightly)
 hack/
   preflight.sh
-  preview.sh
+  install-tools.sh                  # pinned, checksum-verified Kyverno CLI, kind, Chainsaw
 examples/
-  argocd/  flux/  github-actions/  gitlab-ci/
+  argocd/  flux/  github-actions/  gitlab-ci/   # see examples/README.md
 ```
+
+Planned but not in 0.1.0: a chart README generated from values comments (the repository `README.md`
+documents the chart), `templates/tests/preflight-pod.yaml` (R25), and `hack/preview.sh` (R35).
 
 The Go code stays where it is until migration Phase 4 (see [kyverno-migration.md](../plans/kyverno-migration.md)).
 
@@ -547,8 +566,9 @@ The Go code stays where it is until migration Phase 4 (see [kyverno-migration.md
 | A pack is enabled in `audit` mode | 1 `ValidatingPolicy` (Audit, background). |
 | A pack is enabled in `delete` mode | 1 `DeletingPolicy` + 1 `ClusterRole` labeled `rbac.kyverno.io/aggregate-to-cleanup-controller: "true"`. |
 | Any pack is enabled | `ValidatingAdmissionPolicy` + `ValidatingAdmissionPolicyBinding` (metadata guard). |
-| `preflight.helmTest.enabled` | test Pod, ServiceAccount, read-only ClusterRole with `create subjectaccessreviews`, binding. |
-| `monitoring.prometheusRule.enabled` | `PrometheusRule` (needs the Prometheus Operator CRD). |
+| `packs.previewEnvironments.enabled` | Also the G-MIX `ValidatingAdmissionPolicy` and binding. |
+| `preflight.helmTest.enabled` | Not implemented in 0.1.0: the render fails (R25). |
+| `monitoring.prometheusRule.enabled` and a pack in delete mode | `PrometheusRule` (needs the Prometheus Operator CRD). |
 
 Every object carries `app.kubernetes.io/name: kube-janitor-policies`,
 `app.kubernetes.io/managed-by: {{ .Release.Service }}`, and `janitor.io/pack: <pack>` where relevant.
@@ -558,13 +578,15 @@ Every object carries `app.kubernetes.io/name: kube-janitor-policies`,
 | Step | Specification |
 |------|---------------|
 | Registry | `oci://ghcr.io/kaiohenricunha/charts/kube-janitor-policies` (proposed). |
-| Tag | Git tag `kube-janitor-policies-v<semver>`; chart `version` = `appVersion` = `<semver>`. |
+| Tag | Git tag `kube-janitor-policies-v<semver>`; chart `version` = `appVersion` = `<semver>`. The workflow refuses a tag that does not match `Chart.yaml`. |
 | Gates before publish | All required jobs of [compatibility.md](compatibility.md) section 8 and the release gates of [security-and-testing.md](security-and-testing.md) section 7. |
 | Publish | `helm package` → `helm push` to GHCR → `cosign sign` the pushed digest (keyless, GitHub OIDC) → `cosign verify` in the same job. |
-| Release assets | Rendered default manifests (`kube-janitor-policies-<ver>.yaml`, all packs disabled) and an `all-packs-audit.yaml` example, for non-Helm users. |
-| Artifact Hub | Register the OCI repository and publish `artifacthub-repo.yml` metadata. The exact OCI metadata mechanism is **[unverified]**; confirm against Artifact Hub docs in Phase 3. |
-| Workflow pinning | All actions pinned by commit SHA. |
-| Existing workflow | `release.yml` publishes the old chart with chart-releaser to GitHub Pages and runs GoReleaser without a config (audit D14). Phase 3 replaces the chart part. |
+| Release assets | The chart `.tgz` and an `all-packs-audit.yaml` render. A default render is empty (every pack disabled), so it is not attached (R30). Release notes come from `CHANGELOG.md`. |
+| Artifact Hub | Repository URL `oci://ghcr.io/<owner>/charts/kube-janitor-policies`. The workflow pushes `artifacthub-repo.yml` with `oras` to the tag `artifacthub.io` (layer `application/vnd.cncf.artifacthub.repository-metadata.layer.v1.yaml`) **[upstream]** (R29). Registering the repository in the control panel is manual. |
+| GHCR visibility | **[unverified]** The first push may create a private package; make it public once (R31). |
+| Implementation | `.github/workflows/release-policies.yml`; the Policies workflow is reused as the gate. |
+| Workflow pinning | All actions in all workflows pinned by commit SHA (H11). |
+| Existing workflow | Done in Phase 3: `release.yml` no longer runs GoReleaser (it had no config, audit D14) or publishes the deprecated chart; it only builds and signs the deprecated controller image on `v*` tags. |
 
 ### 8A.4 Deployment and upgrade flows
 
@@ -581,9 +603,9 @@ stateDiagram-v2
 
 | Flow | Behavior |
 |------|----------|
-| Upgrade (chart) | Helm updates policies in place. The chart never changes a pack's `enabled` or `mode`. A new default that widens deletion is a minor release with a `BREAKING-SAFETY` note ([compatibility.md](compatibility.md) section 7). |
+| Upgrade (chart) | Helm updates policies in place. The chart never changes a pack's `enabled` or `mode`. A new default that widens deletion is a minor release with a `BREAKING-SAFETY` note ([compatibility.md](compatibility.md) section 7). Proven by e2e E11 against the chart on `main` **[local]**. |
 | Emergency stop | `helm upgrade --reuse-values --set packs.X.mode=audit` removes the `DeletingPolicy` and its RBAC. Faster: `kubectl delete deletingpolicy kube-janitor-<pack>` (GitOps re-applies it, so also change Git). |
-| Uninstall | Removes policies, RBAC, and the guard. It deletes no user object. Lifecycle labels on user objects stay and become inert. The `cleanup.kyverno.io/ttl` label is disarmed for kinds that only this chart granted. |
+| Uninstall | Removes policies, RBAC, and the guard. It deletes no user object. Lifecycle labels on user objects stay and become inert. The `cleanup.kyverno.io/ttl` label is disarmed for kinds that only this chart granted, up to one minute later (R26). The API server can keep enforcing the deleted guard for a few seconds (R34). |
 | Kyverno uninstalled first | `DeletingPolicy` objects go with Kyverno's CRDs or stay inert. No deletion can happen. |
 
 ## 9. Operational behavior and observability
@@ -604,11 +626,13 @@ stateDiagram-v2
 | `kyverno_deleting_controller_deletedobjects_total{policy_name, resource, resource_namespace}` | Kyverno **[upstream]** | Deletions per pack. |
 | `kyverno_deleting_controller_errors_total` | Kyverno **[upstream]** | Alert when it increases for any `kube-janitor-*` policy. |
 | `kyverno_controller_drop_total{controller_name="deleting-controller"}` | Kyverno **[upstream]** | Alert on any increase (stalled schedule). |
+| `kyverno_ttl_controller_info{resource_resource=...}` | Kyverno **[local]** | Shows which kinds the TTL label is armed for (R16, R26). |
 | `PolicyReport` results of audit policies | Kyverno reports controller | Would-delete inventory. |
 | Kubernetes Events `PolicyApplied` / action `Resource Cleaned Up` | Kyverno, only with `generateSuccessEvents: true` **[upstream]** | Per-object trail. The docs recommend `successEventActions: "Resource Cleaned Up"` to limit volume. |
 | API server audit log, user `system:serviceaccount:<kyverno-ns>:kyverno-cleanup-controller`, verb `delete` | Kubernetes | Authoritative deletion audit. |
 
-The optional `PrometheusRule` template (`monitoring.prometheusRule.enabled`) ships the two alerts above.
+The optional `PrometheusRule` template (`monitoring.prometheusRule.enabled`) ships the two alerts above
+(`KubeJanitorDeletingPolicyErrors`, `KubeJanitorDeletingScheduleDropped`).
 
 ## 10. Optional analyzer (future)
 
@@ -654,3 +678,4 @@ The analyzer is a separate, optional Go component. The policy chart never depend
 | Report a UID-precondition request upstream (#18160 exists) | Track; adopt the fix when released. |
 | `PolicyException` support | When the cleanup controller loads exceptions. |
 | Kyverno OCI policy bundles | Only if users ask. Raw rendered YAML as a release asset covers non-Helm users first. |
+| `hack/preview.sh` and the Helm test hook | v0.2 (R25, R35). |

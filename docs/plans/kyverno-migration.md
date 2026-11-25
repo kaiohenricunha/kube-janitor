@@ -247,11 +247,12 @@ hack/preflight.sh                                  # against the same kind clust
 
 After kind runs, delete the cluster, and run `docker volume prune -f`.
 
-## 6. Implementation results (pending transfer to the specs)
+## 6. Implementation results
 
 The owner decided on 2026-11-24 that the autonomous run records `[to-test]` results here and in
 the PR bodies, and that one final docs PR moves them into `docs/specs/`. Each row names the spec
-text that the final PR must change.
+text that had to change. **Transferred to the specs on 2026-11-24** (the docs PR that follows PR #6);
+the four specs now cite these rows as R1–R36.
 
 ### 6.1 Phase 0 (PR #3)
 
