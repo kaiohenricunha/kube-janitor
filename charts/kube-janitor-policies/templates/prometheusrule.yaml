@@ -6,7 +6,8 @@ metadata:
   name: kube-janitor-policies
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "kjp.labels" . | nindent 4 }}
+    {{- /* The chart's own labels win over extra labels with the same key. */}}
+    {{- merge (include "kjp.labels" . | fromYaml) (.Values.monitoring.prometheusRule.labels | default dict) | toYaml | nindent 4 }}
 spec:
   groups:
     - name: kube-janitor-policies
@@ -25,6 +26,6 @@ spec:
           labels:
             severity: critical
           annotations:
-            summary: "Kyverno dropped a DeletingPolicy after repeated failures"
-            description: "After 10 failed retries the schedule stops until the policy changes or the controller restarts (Kyverno #18248). Fix the cause, then restart the cleanup controller."
+            summary: "Kyverno dropped a DeletingPolicy after repeated failures (any DeletingPolicy in the cluster, not only kube-janitor)"
+            description: "After 10 failed retries the schedule stops until the policy changes or the controller restarts (Kyverno #18248). The metric has no policy label: find the policy in the cleanup controller logs, fix the cause, then restart the cleanup controller."
 {{- end }}

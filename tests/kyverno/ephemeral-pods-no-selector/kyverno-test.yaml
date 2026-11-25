@@ -1,0 +1,25 @@
+# Selector-bypass suite: tests/kyverno/run.sh renders the delete policy WITHOUT the opt-in
+# selector line (STRIP in suite.env). The CEL conditions alone must still keep objects that
+# did not opt in. Do not commit policy.yaml.
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: ephemeral-pods-no-selector
+policies:
+- policy.yaml
+resources:
+- ../ephemeral-pods/resources.yaml
+variables: ../ephemeral-pods/values.yaml
+results:
+- isDeletingPolicy: true
+  kind: Pod
+  policy: kube-janitor-ephemeral-pods
+  resources:
+  - team-a/k02-expired
+  result: pass
+- isDeletingPolicy: true
+  kind: Pod
+  policy: kube-janitor-ephemeral-pods
+  resources:
+  - team-a/k01-no-optin
+  result: fail

@@ -19,7 +19,8 @@ Pack shapes (kjp.packDefs):
 {{/*
 CEL that validates the calendar date of a well-shaped expiry string `s` (a CEL expression
 that yields a string) without calling timestamp(), which errors on dates such as
-2026-02-30 and would fail the whole policy run (Kyverno #18248).
+2026-02-30 and would fail the whole policy run (Kyverno #18248). Year 0000 is rejected too:
+it is outside CEL's timestamp range (0001-9999) and timestamp() fails with an overflow.
 Usage: include "kjp.validDateCEL" "variables.rawExpiry"
 */}}
 {{- define "kjp.validDateCEL" -}}
@@ -27,7 +28,7 @@ Usage: include "kjp.validDateCEL" "variables.rawExpiry"
 {{- $y := printf "int(%s.substring(0, 4))" $s -}}
 {{- $m := printf "int(%s.substring(5, 7))" $s -}}
 {{- $d := printf "int(%s.substring(8, 10))" $s -}}
-{{- printf "(%s.matches('%s') && %s <= (%s == 2 ? ((%s %% 4 == 0 && (%s %% 100 != 0 || %s %% 400 == 0)) ? 29 : 28) : (%s in [4, 6, 9, 11] ? 30 : 31)))" $s (include "kjp.expiryRegex" nil) $d $m $y $y $y $m -}}
+{{- printf "(%s.matches('%s') && %s >= 1 && %s <= (%s == 2 ? ((%s %% 4 == 0 && (%s %% 100 != 0 || %s %% 400 == 0)) ? 29 : 28) : (%s in [4, 6, 9, 11] ? 30 : 31)))" $s (include "kjp.expiryRegex" nil) $y $d $m $y $y $y $m -}}
 {{- end -}}
 
 {{/*
@@ -56,11 +57,21 @@ Usage: include "kjp.policyConditions" (dict "root" $ "def" $def "pack" $pack)
 {{- define "kjp.policyConditions" -}}
 {{- $protected := include "kjp.protectedNamespacesCEL" .root -}}
 {{- $conds := list (dict "name" "not-terminating" "expression" "!has(object.metadata.deletionTimestamp)") -}}
+{{- /* The opt-in is also a server-side selector; checking it again in CEL keeps the main safety
+       decision correct even if a selector is not applied (defense in depth, like protection). */ -}}
+{{- if eq .def.selection "namespace" -}}
+{{- $conds = append $conds (dict "name" "opted-in" "expression" "namespaceObject.metadata.?labels.orValue({})[?'janitor.io/job-retention'].orValue('') == 'enabled'") -}}
+{{- else -}}
+{{- $conds = append $conds (dict "name" "opted-in" "expression" "variables.labels[?'janitor.io/ephemeral'].orValue('') == 'true'") -}}
+{{- end -}}
+{{- /* janitor.io/protected=true protects as a label or as an annotation (the deprecated
+       controller's form), on the object or on its namespace. */ -}}
+{{- $objProt := "variables.labels[?'janitor.io/protected'].orValue('') != 'true' && variables.annotations[?'janitor.io/protected'].orValue('') != 'true'" -}}
 {{- if eq .def.scope "Namespaced" -}}
-{{- $conds = append $conds (dict "name" "not-protected" "expression" "variables.labels[?'janitor.io/protected'].orValue('') != 'true' && namespaceObject.metadata.?labels.orValue({})[?'janitor.io/protected'].orValue('') != 'true'") -}}
+{{- $conds = append $conds (dict "name" "not-protected" "expression" (printf "%s && namespaceObject.metadata.?labels.orValue({})[?'janitor.io/protected'].orValue('') != 'true' && namespaceObject.metadata.?annotations.orValue({})[?'janitor.io/protected'].orValue('') != 'true'" $objProt)) -}}
 {{- $conds = append $conds (dict "name" "not-protected-namespace" "expression" (printf "!(object.metadata.namespace in %s)" $protected)) -}}
 {{- else -}}
-{{- $conds = append $conds (dict "name" "not-protected" "expression" "variables.labels[?'janitor.io/protected'].orValue('') != 'true'") -}}
+{{- $conds = append $conds (dict "name" "not-protected" "expression" $objProt) -}}
 {{- $conds = append $conds (dict "name" "not-protected-namespace" "expression" (printf "!(object.metadata.name in %s)" $protected)) -}}
 {{- end -}}
 {{- $conds = append $conds (dict "name" "no-known-manager" "expression" "!variables.annotations.exists(k, k == 'argocd.argoproj.io/tracking-id' || k.startsWith('meta.helm.sh/')) && !variables.labels.exists(k, k.startsWith('kustomize.toolkit.fluxcd.io/') || k.startsWith('helm.toolkit.fluxcd.io/') || k == 'app.kubernetes.io/instance' || k == 'argocd.argoproj.io/instance') && variables.labels[?'app.kubernetes.io/managed-by'].orValue('') != 'Helm'") -}}

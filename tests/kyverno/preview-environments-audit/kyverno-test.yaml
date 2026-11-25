@@ -27,6 +27,7 @@ results:
   - n12-garbage
   - n14-terminating
   - n16-default-ttl-new
+  - n05b-protected-annotation
   result: pass
 - isValidatingPolicy: true
   kind: Namespace

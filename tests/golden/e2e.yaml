@@ -130,7 +130,12 @@ spec:
   conditions:
     - expression: '!has(object.metadata.deletionTimestamp)'
       name: not-terminating
-    - expression: variables.labels[?'janitor.io/protected'].orValue('') != 'true' && namespaceObject.metadata.?labels.orValue({})[?'janitor.io/protected'].orValue('')
+    - expression: namespaceObject.metadata.?labels.orValue({})[?'janitor.io/job-retention'].orValue('')
+        == 'enabled'
+      name: opted-in
+    - expression: variables.labels[?'janitor.io/protected'].orValue('') != 'true' && variables.annotations[?'janitor.io/protected'].orValue('')
+        != 'true' && namespaceObject.metadata.?labels.orValue({})[?'janitor.io/protected'].orValue('')
+        != 'true' && namespaceObject.metadata.?annotations.orValue({})[?'janitor.io/protected'].orValue('')
         != 'true'
       name: not-protected
     - expression: '!(object.metadata.namespace in [''kube-system'', ''kube-public'', ''kube-node-lease'',
@@ -204,10 +209,11 @@ spec:
     - expression: variables.annotations[?'janitor.io/expires-at'].orValue('')
       name: rawExpiry
     - expression: '(variables.rawExpiry.matches(''^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$'')
-        && int(variables.rawExpiry.substring(8, 10)) <= (int(variables.rawExpiry.substring(5,
-        7)) == 2 ? ((int(variables.rawExpiry.substring(0, 4)) % 4 == 0 && (int(variables.rawExpiry.substring(0,
-        4)) % 100 != 0 || int(variables.rawExpiry.substring(0, 4)) % 400 == 0)) ? 29 :
-        28) : (int(variables.rawExpiry.substring(5, 7)) in [4, 6, 9, 11] ? 30 : 31)))'
+        && int(variables.rawExpiry.substring(0, 4)) >= 1 && int(variables.rawExpiry.substring(8,
+        10)) <= (int(variables.rawExpiry.substring(5, 7)) == 2 ? ((int(variables.rawExpiry.substring(0,
+        4)) % 4 == 0 && (int(variables.rawExpiry.substring(0, 4)) % 100 != 0 || int(variables.rawExpiry.substring(0,
+        4)) % 400 == 0)) ? 29 : 28) : (int(variables.rawExpiry.substring(5, 7)) in [4,
+        6, 9, 11] ? 30 : 31)))'
       name: expiryValid
     - expression: 'variables.rawExpiry == '''' ? timestamp(object.metadata.creationTimestamp)
         + duration(''1m'') : (variables.expiryValid ? timestamp(variables.rawExpiry) :
@@ -216,7 +222,11 @@ spec:
   conditions:
     - expression: '!has(object.metadata.deletionTimestamp)'
       name: not-terminating
-    - expression: variables.labels[?'janitor.io/protected'].orValue('') != 'true' && namespaceObject.metadata.?labels.orValue({})[?'janitor.io/protected'].orValue('')
+    - expression: variables.labels[?'janitor.io/ephemeral'].orValue('') == 'true'
+      name: opted-in
+    - expression: variables.labels[?'janitor.io/protected'].orValue('') != 'true' && variables.annotations[?'janitor.io/protected'].orValue('')
+        != 'true' && namespaceObject.metadata.?labels.orValue({})[?'janitor.io/protected'].orValue('')
+        != 'true' && namespaceObject.metadata.?annotations.orValue({})[?'janitor.io/protected'].orValue('')
         != 'true'
       name: not-protected
     - expression: '!(object.metadata.namespace in [''kube-system'', ''kube-public'', ''kube-node-lease'',
@@ -281,10 +291,11 @@ spec:
     - expression: variables.annotations[?'janitor.io/expires-at'].orValue('')
       name: rawExpiry
     - expression: '(variables.rawExpiry.matches(''^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$'')
-        && int(variables.rawExpiry.substring(8, 10)) <= (int(variables.rawExpiry.substring(5,
-        7)) == 2 ? ((int(variables.rawExpiry.substring(0, 4)) % 4 == 0 && (int(variables.rawExpiry.substring(0,
-        4)) % 100 != 0 || int(variables.rawExpiry.substring(0, 4)) % 400 == 0)) ? 29 :
-        28) : (int(variables.rawExpiry.substring(5, 7)) in [4, 6, 9, 11] ? 30 : 31)))'
+        && int(variables.rawExpiry.substring(0, 4)) >= 1 && int(variables.rawExpiry.substring(8,
+        10)) <= (int(variables.rawExpiry.substring(5, 7)) == 2 ? ((int(variables.rawExpiry.substring(0,
+        4)) % 4 == 0 && (int(variables.rawExpiry.substring(0, 4)) % 100 != 0 || int(variables.rawExpiry.substring(0,
+        4)) % 400 == 0)) ? 29 : 28) : (int(variables.rawExpiry.substring(5, 7)) in [4,
+        6, 9, 11] ? 30 : 31)))'
       name: expiryValid
     - expression: 'variables.rawExpiry == '''' ? timestamp(object.metadata.creationTimestamp)
         + duration(''1m'') : (variables.expiryValid ? timestamp(variables.rawExpiry) :
@@ -293,7 +304,10 @@ spec:
   conditions:
     - expression: '!has(object.metadata.deletionTimestamp)'
       name: not-terminating
-    - expression: variables.labels[?'janitor.io/protected'].orValue('') != 'true'
+    - expression: variables.labels[?'janitor.io/ephemeral'].orValue('') == 'true'
+      name: opted-in
+    - expression: variables.labels[?'janitor.io/protected'].orValue('') != 'true' && variables.annotations[?'janitor.io/protected'].orValue('')
+        != 'true'
       name: not-protected
     - expression: '!(object.metadata.name in [''kube-system'', ''kube-public'', ''kube-node-lease'',
         ''default'', ''kyverno''])'
@@ -360,10 +374,11 @@ spec:
     - expression: variables.annotations[?'janitor.io/expires-at'].orValue('')
       name: rawExpiry
     - expression: '(variables.rawExpiry.matches(''^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$'')
-        && int(variables.rawExpiry.substring(8, 10)) <= (int(variables.rawExpiry.substring(5,
-        7)) == 2 ? ((int(variables.rawExpiry.substring(0, 4)) % 4 == 0 && (int(variables.rawExpiry.substring(0,
-        4)) % 100 != 0 || int(variables.rawExpiry.substring(0, 4)) % 400 == 0)) ? 29 :
-        28) : (int(variables.rawExpiry.substring(5, 7)) in [4, 6, 9, 11] ? 30 : 31)))'
+        && int(variables.rawExpiry.substring(0, 4)) >= 1 && int(variables.rawExpiry.substring(8,
+        10)) <= (int(variables.rawExpiry.substring(5, 7)) == 2 ? ((int(variables.rawExpiry.substring(0,
+        4)) % 4 == 0 && (int(variables.rawExpiry.substring(0, 4)) % 100 != 0 || int(variables.rawExpiry.substring(0,
+        4)) % 400 == 0)) ? 29 : 28) : (int(variables.rawExpiry.substring(5, 7)) in [4,
+        6, 9, 11] ? 30 : 31)))'
       name: expiryValid
     - expression: 'variables.rawExpiry == '''' ? timestamp(object.metadata.creationTimestamp)
         + duration(''1m'') : (variables.expiryValid ? timestamp(variables.rawExpiry) :
@@ -372,7 +387,11 @@ spec:
   conditions:
     - expression: '!has(object.metadata.deletionTimestamp)'
       name: not-terminating
-    - expression: variables.labels[?'janitor.io/protected'].orValue('') != 'true' && namespaceObject.metadata.?labels.orValue({})[?'janitor.io/protected'].orValue('')
+    - expression: variables.labels[?'janitor.io/ephemeral'].orValue('') == 'true'
+      name: opted-in
+    - expression: variables.labels[?'janitor.io/protected'].orValue('') != 'true' && variables.annotations[?'janitor.io/protected'].orValue('')
+        != 'true' && namespaceObject.metadata.?labels.orValue({})[?'janitor.io/protected'].orValue('')
+        != 'true' && namespaceObject.metadata.?annotations.orValue({})[?'janitor.io/protected'].orValue('')
         != 'true'
       name: not-protected
     - expression: '!(object.metadata.namespace in [''kube-system'', ''kube-public'', ''kube-node-lease'',
@@ -426,8 +445,10 @@ spec:
 # G-OPT  only a principal allowed to delete the object may add or change
 #        janitor.io/ephemeral, janitor.io/job-retention, cleanup.kyverno.io/ttl, or
 #        janitor.io/expires-at (also its removal while the opt-in stays).
-# G-PROT only a principal allowed to delete the object may remove janitor.io/protected=true.
-# G-FMT  janitor.io/expires-at must be a real UTC date: YYYY-MM-DDTHH:MM:SSZ.
+# G-PROT only a principal allowed to delete the object may remove janitor.io/protected=true
+#        (label or annotation). Namespaces are guarded whenever a namespaced pack is enabled,
+#        because a Namespace's protection covers every object in it.
+# G-FMT  janitor.io/expires-at must be a real UTC date: YYYY-MM-DDTHH:MM:SSZ, year 0001-9999.
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicy
 metadata:
@@ -479,15 +500,15 @@ spec:
     - name: oldExpiry
       expression: "oldObject == null ? '' : oldObject.metadata.?annotations.orValue({})[?'janitor.io/expires-at'].orValue('')"
     - name: newProtected
-      expression: "object.metadata.?labels.orValue({})[?'janitor.io/protected'].orValue('')"
+      expression: "object.metadata.?labels.orValue({})[?'janitor.io/protected'].orValue('') == 'true' || object.metadata.?annotations.orValue({})[?'janitor.io/protected'].orValue('') == 'true'"
     - name: oldProtected
-      expression: "oldObject == null ? '' : oldObject.metadata.?labels.orValue({})[?'janitor.io/protected'].orValue('')"
+      expression: "oldObject != null && (oldObject.metadata.?labels.orValue({})[?'janitor.io/protected'].orValue('') == 'true' || oldObject.metadata.?annotations.orValue({})[?'janitor.io/protected'].orValue('') == 'true')"
     - name: lifecycleChanged
       expression: "(variables.newOptIn != '' && variables.newOptIn != variables.oldOptIn) || (variables.newTTL != '' && variables.newTTL != variables.oldTTL) || (variables.newExpiry != '' && variables.newExpiry != variables.oldExpiry) || (variables.newExpiry == '' && variables.oldExpiry != '' && variables.newOptIn != '')"
     - name: retentionChanged
       expression: "variables.newRetention != '' && variables.newRetention != variables.oldRetention"
     - name: protectionRemoved
-      expression: "variables.oldProtected == 'true' && variables.newProtected != 'true'"
+      expression: "variables.oldProtected && !variables.newProtected"
     - name: targetNamespace
       expression: "request.resource.resource == 'namespaces' ? object.metadata.name : request.namespace"
     - name: inProtectedNamespace
@@ -497,7 +518,7 @@ spec:
     - name: canDeleteJobsHere
       expression: "authorizer.group('batch').resource('jobs').namespace(variables.targetNamespace).check('delete').allowed()"
     - name: expiryValid
-      expression: "(variables.newExpiry.matches('^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$') && int(variables.newExpiry.substring(8, 10)) <= (int(variables.newExpiry.substring(5, 7)) == 2 ? ((int(variables.newExpiry.substring(0, 4)) % 4 == 0 && (int(variables.newExpiry.substring(0, 4)) % 100 != 0 || int(variables.newExpiry.substring(0, 4)) % 400 == 0)) ? 29 : 28) : (int(variables.newExpiry.substring(5, 7)) in [4, 6, 9, 11] ? 30 : 31)))"
+      expression: "(variables.newExpiry.matches('^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$') && int(variables.newExpiry.substring(0, 4)) >= 1 && int(variables.newExpiry.substring(8, 10)) <= (int(variables.newExpiry.substring(5, 7)) == 2 ? ((int(variables.newExpiry.substring(0, 4)) % 4 == 0 && (int(variables.newExpiry.substring(0, 4)) % 100 != 0 || int(variables.newExpiry.substring(0, 4)) % 400 == 0)) ? 29 : 28) : (int(variables.newExpiry.substring(5, 7)) in [4, 6, 9, 11] ? 30 : 31)))"
   validations:
     - expression: "!((variables.lifecycleChanged || variables.retentionChanged) && variables.inProtectedNamespace)"
       messageExpression: "'kube-janitor guard G-NS: cleanup metadata is not allowed in protected namespace ' + variables.targetNamespace + ' (protected: kube-system, kube-public, kube-node-lease, default, kyverno). Create the object in another namespace, for example: kubectl run ... -n <namespace>.'"
@@ -509,7 +530,7 @@ spec:
       messageExpression: "'kube-janitor guard G-OPT: only a principal allowed to delete Jobs in namespace ' + variables.targetNamespace + ' may set or change janitor.io/job-retention'"
       reason: Forbidden
     - expression: "!variables.protectionRemoved || variables.canDelete"
-      messageExpression: "'kube-janitor guard G-PROT: only a principal allowed to delete ' + request.resource.resource + '/' + object.metadata.name + ' may remove janitor.io/protected=true'"
+      messageExpression: "'kube-janitor guard G-PROT: only a principal allowed to delete ' + request.resource.resource + '/' + object.metadata.name + ' may remove janitor.io/protected=true (label or annotation)'"
       reason: Forbidden
     - expression: "variables.newExpiry == '' || variables.newExpiry == variables.oldExpiry || variables.expiryValid"
       messageExpression: "'kube-janitor guard G-FMT: janitor.io/expires-at must be a real UTC date in the form YYYY-MM-DDTHH:MM:SSZ, got ' + variables.newExpiry"

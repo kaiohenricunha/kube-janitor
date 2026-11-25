@@ -47,6 +47,14 @@ spec:
             check:
               ($error != null): true
               (contains($stderr, 'G-FMT')): true
+    - name: year-0000-expiry-denied
+      try:
+        - script:
+            # Outside CEL's timestamp range: timestamp() would fail every policy run (review fix).
+            content: kubectl -n $NAMESPACE annotate pod g-target janitor.io/expires-at=0000-01-01T00:00:00Z
+            check:
+              ($error != null): true
+              (contains($stderr, 'G-FMT')): true
     - name: authorized-opt-in-allowed
       try:
         - script:
@@ -57,6 +65,18 @@ spec:
       try:
         - script:
             content: kubectl -n $NAMESPACE label pod g-target janitor.io/protected- --as=system:serviceaccount:$NAMESPACE:patcher
+            check:
+              ($error != null): true
+              (contains($stderr, 'G-PROT')): true
+    - name: protection-annotation-removal-without-delete-permission-denied
+      try:
+        - script:
+            # The legacy controller's annotation form protects too, so its removal is guarded.
+            content: |
+              set -e
+              kubectl -n $NAMESPACE label pod g-target janitor.io/protected-
+              kubectl -n $NAMESPACE annotate pod g-target janitor.io/protected=true
+              kubectl -n $NAMESPACE annotate pod g-target janitor.io/protected- --as=system:serviceaccount:$NAMESPACE:patcher
             check:
               ($error != null): true
               (contains($stderr, 'G-PROT')): true

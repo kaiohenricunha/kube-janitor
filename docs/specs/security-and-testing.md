@@ -23,7 +23,7 @@ listed here pass in CI on Kubernetes 1.34–1.37 **[local]**.
 | S1 | A default install deletes nothing and grants no delete permission. | Chart: all packs `enabled: false`; delete RBAC rendered only for `mode: delete`. | H1, H2 |
 | S2 | An enabled pack deletes nothing until its mode is `delete`. | Chart: `audit` renders no `DeletingPolicy` and no delete RBAC. | H3, E4a, E16a |
 | S3 | Objects in `kube-system`, `kube-public`, `kube-node-lease`, `default`, and the Kyverno namespace are never deleted, and those Namespaces are never deleted. | Selector + CEL condition (built-in list, values can only add); Kyverno `resourceFilters` for 4 of 5 names **[local]**; guard rule G-NS. | K3, K4, E3, H15 |
-| S4 | An object or namespace labeled `janitor.io/protected=true` is never deleted. | Selector + CEL; guard rule G-PROT. | K5, K6, E3 |
+| S4 | An object or namespace labeled `janitor.io/protected=true` is never deleted. The annotation of the same name (the deprecated controller's form) protects too (R40). | Selector + CEL; guard rule G-PROT, which matches Namespaces whenever a namespaced pack is enabled (R38). | K5, K6, K5b, K6b, H19, E3, `20-guard` |
 | S5 | An object without the opt-in (or, for Jobs, without the namespace opt-in) is never deleted. | Selector (server-side) + CEL. | K1, K22, E5, E4c |
 | S6 | An object with a known manager marker (Argo CD, Flux, Helm) is never deleted. | CEL `no-known-manager`. | K7–K10, E6, GO2, GO4 |
 | S7 | An object with a missing or malformed expiry is kept, unless the pack's default TTL applies to a *missing* annotation. | CEL expiry rule ([kyverno-policy-pack.md](kyverno-policy-pack.md) section 5.3); guard rule G-FMT. | K11, K12 |
@@ -80,14 +80,21 @@ kube-janitor executor) so that the kube-janitor permissions do not mix with othe
 
 The guard is a Kubernetes `ValidatingAdmissionPolicy` (GA in 1.30 **[upstream]**). It runs in the API
 server, so it does not depend on Kyverno webhooks being available. It is rendered when any pack is enabled.
+It matches the kinds of the enabled packs, plus Namespaces whenever a namespaced pack (Pods, ConfigMaps,
+Jobs) is enabled: a Namespace's `janitor.io/protected` and `janitor.io/job-retention` labels decide for every
+object in it (R38). Every rule applies to the Namespaces it matches. So with only namespaced packs enabled,
+setting `janitor.io/ephemeral`, `janitor.io/expires-at`, or `cleanup.kyverno.io/ttl` on a Namespace also needs
+`delete` permission on that Namespace, although no enabled pack reads those keys there. This is deliberate
+(fail safe, principle P3): a CI identity that labels preview namespaces needs that permission anyway once
+`previewEnvironments` is enabled ([gitops-integration.md](gitops-integration.md) section 5, R28).
 
 ### 4.1 Rules
 
 | Rule | Trigger (CREATE or UPDATE) | Check | Default action |
 |------|----------------------------|-------|----------------|
 | G-OPT | `janitor.io/ephemeral`, `janitor.io/expires-at`, `janitor.io/job-retention`, or `cleanup.kyverno.io/ttl` is added or its value changes | The requesting principal may `delete` this object, checked with `authorizer`. For a Namespace object, the check sets the namespace attribute to the Namespace's own name, as the API server does for `DELETE namespaces/X`, so a RoleBinding inside X counts (R27). For `job-retention` (a Namespace label): the principal may delete `jobs` in that namespace (R22). The guard covers Namespaces whenever the Jobs pack is enabled. | Deny |
-| G-FMT | `janitor.io/expires-at` present and changed | Value matches `YYYY-MM-DDTHH:MM:SSZ` and is a real calendar date (month length, leap years), the same check the policies use (R5) | Deny |
-| G-PROT | `janitor.io/protected=true` is removed or changed | The principal may `delete` this object | Deny |
+| G-FMT | `janitor.io/expires-at` present and changed | Value matches `YYYY-MM-DDTHH:MM:SSZ` and is a real calendar date (month length, leap years) with a year of at least 0001, the same check the policies use (R5, R37) | Deny |
+| G-PROT | `janitor.io/protected=true` (label or annotation) is removed or changed, and neither form remains | The principal may `delete` this object | Deny |
 | G-NS | Any lifecycle key above is added to an object in, or to, a protected namespace | Always fails; the message lists the protected namespaces and suggests `-n <namespace>` (R24) | Deny |
 | G-MIX | An object with a manager marker is created in a Namespace labeled `janitor.io/ephemeral=true` | Always fails | Warn + Audit (configurable to Deny); own policy `kube-janitor-mixed-ownership`, rendered with `previewEnvironments` |
 
@@ -210,6 +217,10 @@ Fixture timestamps are fixed far in the past (`2000-01-01T00:00:00Z`) or far in 
 | K20 | Job owned by a CronJob | kept |
 | K21 | Job running, suspended, or finished recently | kept |
 | K22 | Job in a namespace without `janitor.io/job-retention=enabled` | kept |
+| K5b | Opt-in, expired, annotation `janitor.io/protected=true` (no label), on a Pod and on a preview Namespace | kept (R40) |
+| K6b | Opt-in, expired, in a namespace with the annotation `janitor.io/protected=true` | kept (R40) |
+| K12i | Opt-in, `expires-at: 0000-01-01T00:00:00Z` | kept, no evaluation error (R37) |
+| K24 | Selector bypass: the delete policy rendered without its opt-in selector line; an object that did not opt in (Pod, ConfigMap, Namespace, Job in a namespace without `job-retention`) | kept by CEL alone (R39) |
 | K23 | Pack overlap: an object matched by two packs is deleted by neither twice (policy conflict); each kind belongs to exactly one pack | rendering check H5 |
 
 **Audit/delete equivalence (A1).** For every fixture above, the audit `ValidatingPolicy` must report
@@ -217,6 +228,9 @@ Fixture timestamps are fixed far in the past (`2000-01-01T00:00:00Z`) or far in 
 policy reports `skip` (selector exclusion), the audit policy may report `pass`, which also means "kept"
 (observed for the Jobs pack, whose `objectSelector` has only a `NotIn` expression; R19). CI runs both
 suites on the same fixtures.
+
+K24 runs as the `*-no-selector` suites: `suite.env` sets `STRIP`, and `tests/kyverno/run.sh` removes that
+line from the render and fails if the line is not there, so the suite cannot pass by accident.
 
 **Policy files.** `kyverno test` rejects non-policy documents in a policy file (`policy type not
 supported`), so `tests/kyverno/run.sh` renders each policy alone with `helm template --show-only` (R10).
@@ -248,6 +262,11 @@ fixture policy must make the suite fail (negative control, run by `tests/kyverno
 | H16 | Every file in `examples/` parses. |
 | H17 | Release metadata: release version, old chart deprecated, `artifacthub-repo.yml` without personal data. |
 | H18 | Release workflow shape: tag pattern, package, push, sign, verify, Artifact Hub, Policies gate; no GoReleaser. |
+| H19 | The guard covers Namespaces whenever a namespaced pack is enabled, in audit and delete mode (R38). |
+| H20 | The chart renders as a subchart of a scratch umbrella chart whose `global` has other keys; its own `global` keys are still validated (R41). |
+| H21 | `monitoring.prometheusRule.labels` reaches the `PrometheusRule`; the chart's own labels stay; non-string values are refused (R42). |
+| H22 | Durations above `999999h` or `99999999m` are refused; the maximums render (R43). |
+| H23 | NOTES describe each pack correctly and state whether the guard rejects or only warns (R44). |
 
 All Helm tests run with Helm 3.22.1 and Helm 4.3.2. `helm lint` does not execute template `fail`
 calls, so the gate is tested with `helm template` (R12).
@@ -300,8 +319,8 @@ guard (R34).
 
 A release tag is published only when all of these hold on the release commit:
 
-1. `policy-unit` (K1–K23, A1, CEL negative control) passes. **Automated:** `release-policies.yml` runs the Policies workflow first.
-2. `chart-render` (H1–H18) passes on Helm 3.22.1 and 4.3.2. **Automated** (same).
+1. `policy-unit` (K1–K24 with K5b, K6b, K12i; A1; CEL negative control) passes. **Automated:** `release-policies.yml` runs the Policies workflow first.
+2. `chart-render` (H1–H23) passes on Helm 3.22.1 and 4.3.2. **Automated** (same).
 3. `e2e` (E1–E16, G-MIX) passes on Kubernetes 1.34, 1.35, 1.36, and 1.37. **Automated** (same).
 4. `gitops-e2e` (GO2, GO4, GO5) passed on the release commit. **Manual check** before pushing the tag.
 5. The changelog lists every change that widens deletion under `BREAKING-SAFETY`, and a maintainer approved it.

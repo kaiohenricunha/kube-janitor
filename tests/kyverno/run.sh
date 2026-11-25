@@ -22,6 +22,13 @@ for suite in "$root"/tests/kyverno/*/; do
     mkdir -p "$work/kyverno"
     cp -r "$root/tests/kyverno/." "$work/kyverno/"
     render "$TEMPLATE" "$VALUES" > "$work/kyverno/$name/policy.yaml"
+    if [ -n "${STRIP:-}" ]; then
+      # Selector-bypass suite: drop the opt-in selector line so only CEL decides.
+      grep -qF -- "$STRIP" "$work/kyverno/$name/policy.yaml" \
+        || { echo "STRIP pattern not found in the render: $STRIP"; exit 1; }
+      grep -vF -- "$STRIP" "$work/kyverno/$name/policy.yaml" > "$work/strip.tmp"
+      mv "$work/strip.tmp" "$work/kyverno/$name/policy.yaml"
+    fi
     echo "=== suite $name"
     kyverno test "$work/kyverno/$name" ) || failed=1
 done
