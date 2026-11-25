@@ -1,0 +1,38 @@
+# Dependabot version updates. Security updates are a separate repository setting
+# (Settings → Advanced Security → Dependabot security updates). GitHub can apply the ignore
+# rules below to security updates too, so they stay narrow.
+version: 2
+updates:
+  # Go modules of the deprecated, frozen controller, in one weekly group. Minor updates stay on:
+  # golang.org/x/* and most other v0 modules ship every fix as a minor release. Only the
+  # Kubernetes libraries are held to patch releases, because their minor versions move together
+  # with controller-runtime and are a deliberate upgrade; their security fixes ship as patches.
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      go-modules:
+        patterns: ["*"]
+    ignore:
+      - dependency-name: "k8s.io/*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "sigs.k8s.io/*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+    commit-message:
+      prefix: "chore(deps)"
+
+  # Actions are pinned by commit SHA (test H11). Dependabot moves the SHA and the
+  # version comment together, in one grouped pull request per week.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "ci(deps)"
+
+# No docker entry: the Dockerfile follows golang:1.26-alpine (newest 1.26 patch) by tag,
+# and a Go minor upgrade must change go.mod, the workflows, and the Dockerfile together.
