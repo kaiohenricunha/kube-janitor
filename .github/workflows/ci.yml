@@ -18,8 +18,24 @@ jobs:
 
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
-          go-version-file: go.mod
+          go-version: "1.26"  # newest 1.26 patch; go.mod's toolchain line is only the floor
+          check-latest: true
           cache: true
+
+      - name: Go minor version matches go.mod
+        # CI and the Dockerfile follow the newest patch of one Go minor version. A move to a new
+        # minor must change go.mod, every workflow, and the Dockerfile together.
+        run: |
+          want="$(sed -n 's/^go \([0-9]*\.[0-9]*\).*/\1/p' go.mod)"
+          bad=0
+          for f in .github/workflows/*.yml Dockerfile; do
+            while IFS= read -r v; do
+              [ -z "$v" ] && continue
+              [ "$v" = "$want" ] || { echo "$f uses Go $v, but go.mod says $want"; bad=1; }
+            done < <(grep -oE '(go-version: \[?"|golang:)[0-9]+\.[0-9]+' "$f" | grep -oE '[0-9]+\.[0-9]+$')
+          done
+          [ "$bad" = 0 ] && echo "every Go version follows go.mod ($want)"
+          exit "$bad"
 
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
@@ -40,6 +56,7 @@ jobs:
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version: ${{ matrix.go-version }}
+          check-latest: true
           cache: true
 
       - name: Run unit tests
@@ -66,7 +83,8 @@ jobs:
 
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
-          go-version-file: go.mod
+          go-version: "1.26"  # newest 1.26 patch; go.mod's toolchain line is only the floor
+          check-latest: true
           cache: true
 
       - name: Build binary
@@ -95,7 +113,8 @@ jobs:
 
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
-          go-version-file: go.mod
+          go-version: "1.26"  # newest 1.26 patch; go.mod's toolchain line is only the floor
+          check-latest: true
           cache: true
 
       - run: go vet ./...

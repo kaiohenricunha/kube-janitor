@@ -1,7 +1,11 @@
 # syntax=docker/dockerfile:1
 
-# Build stage
-FROM golang:1.26.11-alpine AS builder
+# Build stage. The tag follows the newest Go 1.26 patch (release.yml and the Makefile build with
+# --pull), so standard-library fixes reach the image without a version edit. Official golang
+# images set GOTOOLCHAIN=local, which ignores go.mod's toolchain line; auto makes that line a
+# real floor, so a stale cached tag fetches the minimum patched toolchain instead of using it.
+FROM golang:1.26-alpine AS builder
+ENV GOTOOLCHAIN=auto
 ARG VERSION=dev
 ARG TARGETOS=linux
 ARG TARGETARCH=amd64

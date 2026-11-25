@@ -122,13 +122,13 @@ run: manifests ## Run manager locally against the current cluster (--dry-run by 
 ## Container images
 
 docker-build: ## Build container image for current platform
-	docker build \
+	docker build --pull \
 		--build-arg VERSION=$(IMAGE_TAG) \
 		-t $(IMAGE) \
 		-f Dockerfile .
 
 docker-buildx: ## Build and push multi-arch container image
-	docker buildx build \
+	docker buildx build --pull \
 		--platform linux/amd64,linux/arm64 \
 		--build-arg VERSION=$(IMAGE_TAG) \
 		-t $(IMAGE) \

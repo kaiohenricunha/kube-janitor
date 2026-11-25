@@ -140,7 +140,8 @@ OpenTelemetry tracing is no-op when `--otel-endpoint` is empty. Spans: `<control
 
 - `.github/workflows/ci.yml` — lint + test + build (blocks merge)
 - `.github/workflows/security.yml` — govulncheck + gosec + trivy + dependency-review
-- `.github/workflows/release.yml` — GoReleaser + docker buildx + cosign signing + Helm chart-releaser
+- `.github/workflows/release.yml` — builds and cosign-signs the deprecated controller image on `v*` tags (GoReleaser and chart-releaser were removed in Phase 3)
+- `.github/workflows/release-policies.yml` — packages, pushes, and signs the `kube-janitor-policies` chart on `kube-janitor-policies-v*` tags
 
 ## Deployment
 
